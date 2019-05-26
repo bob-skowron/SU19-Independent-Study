@@ -1,0 +1,10 @@
+name: eps-admissible-env
+dependencies:
+- python=3
+- pip
+- pip:
+    - numpy
+    - pandas
+    - pylint
+    - scipy
+    - sklearn
