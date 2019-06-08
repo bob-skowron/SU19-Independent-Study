@@ -1,0 +1,11 @@
+name: var-sel-data
+dependencies:
+- python=3
+- pip
+- pip:
+    - numpy
+    - pandas
+    - pylint
+    - scipy
+    - wrds
+    - jupyter
