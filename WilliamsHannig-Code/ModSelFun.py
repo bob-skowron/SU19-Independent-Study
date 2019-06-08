@@ -164,9 +164,7 @@ def model_info(y,X,g2,L,n,p,m,N,po):
 #----------------------------------------------------------------------------------------------------------------
 # The main algorithm.
 #----------------------------------------------------------------------------------------------------------------
-def admissible_subsets(y,X,N=None,steps,burnin,po,PropWeights=None):
-	
-	N = ( 100 if N is None else N )
+def admissible_subsets(y,X,N,steps,burnin,po,PropWeights=None):
 	
 	X = X / np.sqrt(np.diag(np.transpose(X) @ X))
 	n = X.shape[0]

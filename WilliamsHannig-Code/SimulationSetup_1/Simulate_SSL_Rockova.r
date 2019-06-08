@@ -1,4 +1,4 @@
-library(SSL)
+library(SSLASO)
 
 # To run from command line... $ Rscript Simulate_SpikeSlab_Rockova.r seed p corr 
 
@@ -20,7 +20,7 @@ X_test = as.matrix(Data[101:200,-1])
 #-------------------------------------------------------------------------------------------------------------------
 #-------------------------------------------------------------------------------------------------------------------
 lambda1 = 1
-Output = SSL( X, y, penalty="adaptive", lambda0=seq(lambda1,50,length=20), lambda1=lambda1, max.iter=100000)
+Output = SSLASSO( X, y, penalty="adaptive", lambda0=seq(lambda1,50,length=20), lambda1=lambda1, max.iter=100000)
 
 
 # Covariates in the MAP model.

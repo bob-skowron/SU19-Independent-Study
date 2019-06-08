@@ -37,15 +37,17 @@ log_likelihood <- function(params,X,Y){
 }
 
 # Step 3: priors
-
+# (4)
 log_pi_gam <- function(gam, omega=0.05){
 	return(sum(gam*log(omega)+(1-gam)*log(1-omega)))
 }
 
+# (3)
 log_pi_sigma <- function(sigma){
 	return(dgamma(1/sigma, shape=5/2, rate = 5*.007*.007/2, log = TRUE))
 }
 
+# (7)
 log_pi_beta <- function(beta,gam){
 	z1<-rnorm(p,0, 9.925*(10^(-6)))
 	z2 <-rnorm(p,0, .0062034 )
