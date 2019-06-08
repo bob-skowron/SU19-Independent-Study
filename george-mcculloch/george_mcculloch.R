@@ -62,13 +62,13 @@ post.gam <- function(gam, X,Y){
 	d0<- rep(9.925*(10^(-6)),p)
 	d1<- rep(.0062034 ,p)
 	ind<-ifelse(gam==1,1,0)
-	D <- diag(d1*gam+(1-gam)*d0)
-	D.minusonehalf <- diag((1/sqrt(d1))*gam+(1-gam)*(1/sqrt(d0)))
-	X_tilde <- rbind(X,D.minusonehalf)
+	D <- diag(d1*gam+(1-gam)*d0) # (16)
+	D.minusonehalf <- diag((1/sqrt(d1))*gam+(1-gam)*(1/sqrt(d0))) # (23)
+	X_tilde <- rbind(X,D.minusonehalf) # (23)
 	Y<-as.matrix(Y)
-	Y_tilde <- as.matrix(c(Y,rep(0,p)))
-	S2 <- t(Y_tilde)%*%Y_tilde-t(Y_tilde)%*%X_tilde%*%solve(t(X_tilde)%*%X_tilde)%*%t(X_tilde)%*%Y_tilde
-	g.gam <- (det(t(X_tilde)%*%X_tilde)^(-0.5))*(det(t(D)%*%D)^(-0.5))*((5*(.007*.007)+S2)^(-(n+5)/2))
+	Y_tilde <- as.matrix(c(Y,rep(0,p))) # (23)
+	S2 <- t(Y_tilde)%*%Y_tilde-t(Y_tilde)%*%X_tilde%*%solve(t(X_tilde)%*%X_tilde)%*%t(X_tilde)%*%Y_tilde # (25)
+	g.gam <- (det(t(X_tilde)%*%X_tilde)^(-0.5))*(det(t(D)%*%D)^(-0.5))*((5*(.007*.007)+S2)^(-(n+5)/2)) # (24)
 	return(log(g.gam)+log_pi_gam(gam))
 }
 
