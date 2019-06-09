@@ -1,4 +1,4 @@
-library(SSLASO)
+library(SSLASSO)
 
 # To run from command line... $ Rscript Simulate_SpikeSlab_Rockova.r seed p corr 
 
@@ -9,7 +9,7 @@ corr = ifelse( as.logical(args[3])==TRUE, 'corr', '')
 set.seed(as.integer(seed))
 
 
-Data = read.table(paste0('Data_',p,'p_',corr,seed,'.csv'), header=FALSE, sep=',')
+Data = read.table(paste0('generated-data/Data_',p,'p_',corr,seed,'.csv'), header=FALSE, sep=',')
 y = Data[1:100,1]
 X = as.matrix(Data[1:100,-1])
 y_test = Data[101:200,1]
@@ -34,6 +34,6 @@ postProb = -99
 
 items = list( MAP_covariates=covariates, postProb=postProb, rmse=rmse)
 
-save( items, file=paste0('SSL_Rockova_',p,'p_',corr,seed,'.rda'))
+save( items, file=paste0('output_SSL_Rockova/SSL_Rockova_',p,'p_',corr,seed,'.rda'))
 #-------------------------------------------------------------------------------------------------------------------
 #-------------------------------------------------------------------------------------------------------------------
