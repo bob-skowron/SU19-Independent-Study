@@ -38,7 +38,7 @@ create_sample_data <- function(n, p, rho, beta) {
   stock.vals[1,] <- u
   
   # create a bunch of (possibly correlated) stock returns
-  stock.returns <- MASS::mvrnorm(n-1, rep(0,k), Sigma = sigma.mat)
+  stock.returns <- MASS::mvrnorm(n-1, rep(0,p), Sigma = sigma.mat)
   stock.cumret <- apply(stock.returns, 2, cumsum) # assume log returns
   
   stock.vals[2:n,] <- matrix(rep(u,n-1),ncol = 10, byrow = TRUE) * exp(stock.cumret) # turn into prices
@@ -101,11 +101,18 @@ post.gam <- function(gam, X, Y, post_param){
 	Y_tilde <- as.matrix(c(Y,rep(0,p))) # (23)
 	
 	S2 <- t(Y_tilde)%*%Y_tilde-t(Y_tilde)%*%X_tilde%*%solve(t(X_tilde)%*%X_tilde)%*%t(X_tilde)%*%Y_tilde # (25)
-	g.gam <- (det(t(X_tilde)%*%X_tilde)^(-0.5))*(det(t(D)%*%D)^(-0.5))*((nu*lambda+S2)^(-(n+nu)/2)) # (24)
-  #print((det(t(X_tilde)%*%X_tilde)^(-0.5)))
-  #print((det(t(D)%*%D)^(-0.5)))
-  #print(((nu*lambda+S2)^(-(n+nu)/2)))
-	return(log(g.gam)+log_pi_gam(gam))
+	#g.gam <- (det(t(X_tilde)%*%X_tilde)^(-0.5))*(det(t(D)%*%D)^(-0.5))*((nu*lambda+S2)^(-(n+nu)/2)) # (24)
+	
+	# product of eigs = det, so attempt to use thats
+	e.val.XtilTXtil <- eigen(t(X_tilde)%*%X_tilde)$values
+	log.det.X <- sum(log(e.val.XtilTXtil))
+	e.val.DTD <- eigen(t(D)%*%D)$values
+	log.det.D <- sum(log(e.val.DTD))	
+	log.g.gam <- -0.5*log.det.X-0.5*log.det.D-((n+nu)/2)*log(nu*lambda+S2)
+	#print((det(t(X_tilde)%*%X_tilde)^(-0.5)))
+	#print((det(t(D)%*%D)^(-0.5)))
+	#print(((nu*lambda+S2)^(-(n+nu)/2)))
+	return(log.g.gam+log_pi_gam(gam))
 }
 
 # Step 5: MCMC for gam
@@ -138,29 +145,47 @@ run_MCMC <- function(X, Y, n_burn, n_samples, p, post_param) {
 
 
 # running out the simulation
+# running out the simulation
 post_params <- list(v0 = 9.925*(10^(-6)), v1 = .0062034, nu = 5, lambda = .007^2)
 
 sample.data.orig <- create_sample_data.orig(n = 101, p = 10, c(0,0,0,0,0,0,0,0,1,1)) # only last two stocks are important
 results <- run_MCMC(sample.data.orig$X, sample.data.orig$Y, n_burn = 1000, n_samples = 10000, p = 10, post_param = post_params)
 
 colMeans(results$Samples)
+summary(lm(sample.data.orig$Y~sample.data.orig$X-1))
 #> colMeans(samples) seems to work fairly well, last two are highest by a lot
 # [1] 0.0460 0.0042 0.0106 0.6877 0.2717 0.0076 0.3385 0.5105 0.8991 0.9181
 
+
 sample.data.uncorr <- create_sample_data(n = 101, p = 10, rho=0, c(0,0,0,0,0,0,0,0,1,1)) # only last two stocks are important
-results <- run_MCMC(sample.data.uncorr$X.ret, sample.data.uncorr$Y.ret, n_burn = 1000, n_samples = 10000, p = 10, post_param = post_params)
+results <- run_MCMC(sample.data.uncorr$X, sample.data.uncorr$Y, n_burn = 1000, n_samples = 10000, p = 10, post_param = post_params)
 
 colMeans(results$Samples)
+summary(lm(sample.data.uncorr$Y~sample.data.uncorr$X-1))
+
+results <- run_MCMC(100*sample.data.uncorr$X.ret, 100*sample.data.uncorr$Y.ret, n_burn = 1000, n_samples = 10000, p = 10, post_param = post_params)
+
+colMeans(results$Samples)
+summary(lm(sample.data.uncorr$Y.ret~sample.data.uncorr$X.ret-1))
 
 sample.data.corr <- create_sample_data(n = 101, p = 10, rho=.5, c(0,0,0,0,0,0,0,0,1,1)) # only last two stocks are important
 results <- run_MCMC(sample.data.corr$X, sample.data.corr$Y, n_burn = 1000, n_samples = 10000, p = 10, post_param = post_params)
 
 colMeans(results$Samples)
+summary(lm(sample.data.corr$Y~sample.data.corr$X-1))
+
+results <- run_MCMC(100*sample.data.corr$X.ret, 100*sample.data.corr$Y.ret, n_burn = 1000, n_samples = 10000, p = 10, post_param = post_params)
+
+colMeans(results$Samples)
+summary(lm(sample.data.corr$Y.ret~sample.data.corr$X.ret-1))
+
 
 # load the sample data from CRSP. Should be close to part 6
 crsp.data <- read.csv("../data/combined-data.csv", header = FALSE)
 Y <- crsp.data[,1]
-X <- as.matrix(crsp.data[,2:201])
+X <- as.matrix(crsp.data[,2:51])
 colnames(X) <- NULL
 
-crsp.results <- run_MCMC(X, Y, n_burn = 1000, n_samples = 10000, p = 200, post_param = post_params)
+crsp.results <- run_MCMC(X, Y, n_burn = 1000, n_samples = 10000, p = 50, post_param = post_params)
+
+colMeans(crsp.results$Samples)
