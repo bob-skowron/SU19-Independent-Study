@@ -85,15 +85,17 @@ post.gam <- function(gam, X, Y, post_param){
 	n <- length(Y)
 	p <- ncol(X)
 	
-	v0 = post_param$v0
-	v1 = post_param$v1
-	nu = post_param$nu
-	lambda = post_param$lambda
+	v0 <- post_param$v0
+	v1 <- post_param$v1
+	nu <- post_param$nu
+	lambda <- post_param$lambda
+	calcType <- post_param$calcType
 	
 	d0<- rep(v0, p)
 	d1<- rep(v1, p)
 	ind<-ifelse(gam==1,1,0)
 	D <- diag(d1*gam+(1-gam)*d0) # (16)
+	R <- diag(1, p)
 	D.minusonehalf <- diag((1/sqrt(d1))*gam+(1-gam)*(1/sqrt(d0))) # (23)
 	
 	X_tilde <- rbind(X,D.minusonehalf) # (23)
@@ -101,24 +103,37 @@ post.gam <- function(gam, X, Y, post_param){
 	Y_tilde <- as.matrix(c(Y,rep(0,p))) # (23)
 	
 	S2 <- t(Y_tilde)%*%Y_tilde-t(Y_tilde)%*%X_tilde%*%solve(t(X_tilde)%*%X_tilde)%*%t(X_tilde)%*%Y_tilde # (25)
-	#g.gam <- (det(t(X_tilde)%*%X_tilde)^(-0.5))*(det(t(D)%*%D)^(-0.5))*((nu*lambda+S2)^(-(n+nu)/2)) # (24)
 	
-	# product of eigs = det, so attempt to use thats
-	e.val.XtilTXtil <- eigen(t(X_tilde)%*%X_tilde)$values
-	log.det.X <- sum(log(e.val.XtilTXtil))
-	e.val.DTD <- eigen(t(D)%*%D)$values
-	log.det.D <- sum(log(e.val.DTD))	
-	log.g.gam <- -0.5*log.det.X-0.5*log.det.D-((n+nu)/2)*log(nu*lambda+S2)
-	#print((det(t(X_tilde)%*%X_tilde)^(-0.5)))
-	#print((det(t(D)%*%D)^(-0.5)))
-	#print(((nu*lambda+S2)^(-(n+nu)/2)))
+	if(calcType == "fast"){
+	  TT <- chol(t(X_tilde)%*%X_tilde)
+	  W <- solve(t(TT))%*%t(X_tilde)%*%Y_tilde
+	  g.gam <- (prod(diag(TT)^2*diag(D))^(-.5))*(nu*lambda+t(Y)%*%Y-t(W)%*%W)^(-(n+nu)/2) #(31)
+	  log.g.gam <- log(g.gam)
+	}
+	else if(calcType == "nonconj"){
+	  
+	}
+	else if(calcType == "eig"){
+	  # product of eigs = det, so attempt to use thats
+	  e.val.XtilTXtil <- eigen(t(X_tilde)%*%X_tilde)$values
+	  log.det.X <- sum(log(e.val.XtilTXtil))
+	  e.val.DTD <- eigen(t(D)%*%D)$values
+	  log.det.D <- sum(log(e.val.DTD))	
+	  log.g.gam <- -0.5*log.det.X-0.5*log.det.D-((n+nu)/2)*log(nu*lambda+S2)
+	}
+	else { #normal
+	  g.gam <- (det(t(X_tilde)%*%X_tilde)^(-0.5))*(det(t(D)%*%D)^(-0.5))*((nu*lambda+S2)^(-(n+nu)/2)) # (24)
+	  log.g.gam <- log(g.gam)
+	}
+
 	return(log.g.gam+log_pi_gam(gam))
 }
 
 # Step 5: MCMC for gam
-run_MCMC <- function(X, Y, n_burn, n_samples, p, post_param) {
+run_MCMC <- function(X, Y, n_burn, n_samples, post_param) {
+  p <- ncol(X)
   samples<-matrix(NA,n_samples,p)
-  gam <-rep(1,p)
+  gam <-rep(0,p)
   
   for(i in 1:(n_burn+n_samples)){
     # choose an index and flip it
@@ -126,6 +141,7 @@ run_MCMC <- function(X, Y, n_burn, n_samples, p, post_param) {
   	gam.new.ind <- 1-gam[prop.index] #ifelse(gam[prop.index]==0,1,0)
   	gam.new <- gam
   	gam.new[prop.index] <- gam.new.ind
+  	#print(sum(gam.new))
   	
   	diff <- post.gam(gam.new,X,Y, post_param)-post.gam(gam,X,Y, post_param)
   	r.exp <- min(exp(diff),1)
@@ -146,46 +162,44 @@ run_MCMC <- function(X, Y, n_burn, n_samples, p, post_param) {
 
 # running out the simulation
 # running out the simulation
-post_params <- list(v0 = 9.925*(10^(-6)), v1 = .0062034, nu = 5, lambda = .007^2)
+post_params <- list(v0 = 9.925*(10^(-6)), v1 = .0062034, nu = 5, lambda = .007^2, calcType = "fast")
 
-sample.data.orig <- create_sample_data.orig(n = 101, p = 10, c(0,0,0,0,0,0,0,0,1,1)) # only last two stocks are important
-results <- run_MCMC(sample.data.orig$X, sample.data.orig$Y, n_burn = 1000, n_samples = 10000, p = 10, post_param = post_params)
+sample.data.orig <- create_sample_data.orig(n = 101, p=10, c(0,0,0,0,0,0,0,0,1,1)) # only last two stocks are important
+results <- run_MCMC(sample.data.orig$X, sample.data.orig$Y, n_burn = 1000, n_samples = 10000, post_param = post_params)
 
 colMeans(results$Samples)
 summary(lm(sample.data.orig$Y~sample.data.orig$X-1))
 #> colMeans(samples) seems to work fairly well, last two are highest by a lot
 # [1] 0.0460 0.0042 0.0106 0.6877 0.2717 0.0076 0.3385 0.5105 0.8991 0.9181
 
-
-sample.data.uncorr <- create_sample_data(n = 101, p = 10, rho=0, c(0,0,0,0,0,0,0,0,1,1)) # only last two stocks are important
-results <- run_MCMC(sample.data.uncorr$X, sample.data.uncorr$Y, n_burn = 1000, n_samples = 10000, p = 10, post_param = post_params)
-
+# uncorrelated stocks
+sample.data.uncorr <- create_sample_data(n = 101, p=10, rho=0, c(0,0,0,0,0,0,0,0,1,1)) # only last two stocks are important
+results <- run_MCMC(sample.data.uncorr$X, sample.data.uncorr$Y, n_burn = 1000, n_samples = 10000, post_param = post_params)
 colMeans(results$Samples)
 summary(lm(sample.data.uncorr$Y~sample.data.uncorr$X-1))
 
-results <- run_MCMC(100*sample.data.uncorr$X.ret, 100*sample.data.uncorr$Y.ret, n_burn = 1000, n_samples = 10000, p = 10, post_param = post_params)
-
+# note that multiplying by 100 or 1000 gives better results....
+results <- run_MCMC(100*sample.data.uncorr$X.ret, 100*sample.data.uncorr$Y.ret, n_burn = 1000, n_samples = 10000, post_param = post_params)
 colMeans(results$Samples)
 summary(lm(sample.data.uncorr$Y.ret~sample.data.uncorr$X.ret-1))
 
+# correlated stock samples
 sample.data.corr <- create_sample_data(n = 101, p = 10, rho=.5, c(0,0,0,0,0,0,0,0,1,1)) # only last two stocks are important
-results <- run_MCMC(sample.data.corr$X, sample.data.corr$Y, n_burn = 1000, n_samples = 10000, p = 10, post_param = post_params)
-
+results <- run_MCMC(sample.data.corr$X, sample.data.corr$Y, n_burn = 1000, n_samples = 10000, post_param = post_params)
 colMeans(results$Samples)
 summary(lm(sample.data.corr$Y~sample.data.corr$X-1))
 
-results <- run_MCMC(100*sample.data.corr$X.ret, 100*sample.data.corr$Y.ret, n_burn = 1000, n_samples = 10000, p = 10, post_param = post_params)
-
+results <- run_MCMC(10000*sample.data.corr$X.ret, 10000*sample.data.corr$Y.ret, n_burn = 1000, n_samples = 10000, post_param = post_params)
 colMeans(results$Samples)
 summary(lm(sample.data.corr$Y.ret~sample.data.corr$X.ret-1))
 
 
 # load the sample data from CRSP. Should be close to part 6
 crsp.data <- read.csv("../data/combined-data.csv", header = FALSE)
-Y <- crsp.data[,1]
-X <- as.matrix(crsp.data[,2:51])
+Y <- crsp.data[1:300,1]
+X <- as.matrix(crsp.data[1:300,2:201])
 colnames(X) <- NULL
 
-crsp.results <- run_MCMC(X, Y, n_burn = 1000, n_samples = 10000, p = 50, post_param = post_params)
-
+crsp.results <- run_MCMC(X, Y, n_burn = 1000, n_samples = 1000, post_param = post_params)
 colMeans(crsp.results$Samples)
+plot(sort(colMeans(crsp.results$Samples), decreasing =TRUE))
