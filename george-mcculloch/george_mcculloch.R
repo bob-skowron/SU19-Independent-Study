@@ -1,3 +1,17 @@
+
+suppressWarnings(library(optparse))
+
+
+option_list <- list(
+  make_option(c("-f", "--file"), action="store_true", help="File to be parsed"),
+  make_option(c("-n", "--nstocks"), action="store_true", type="integer", help="Number of stocks to include", default = -1),
+  make_option(c("-b", "--nburn"), action="store_true", type="integer", help="Number of burn-in"),
+  make_option(c("-s", "--nsamples"), action="store_true", type="integer", help="Number of samples"),
+  make_option(c("-o", "--output"), action="store_true", help="Output file")
+)
+args <- parse_args(OptionParser(option_list=option_list))
+
+
 ######################
 ####
 ####	Rough Codes for conjugate sampler for marginal posterior 
@@ -107,8 +121,9 @@ post.gam <- function(gam, X, Y, post_param){
 	if(calcType == "fast"){
 	  TT <- chol(t(X_tilde)%*%X_tilde)
 	  W <- solve(t(TT))%*%t(X_tilde)%*%Y_tilde
-	  g.gam <- (prod(diag(TT)^2*diag(D))^(-.5))*(nu*lambda+t(Y)%*%Y-t(W)%*%W)^(-(n+nu)/2) #(31)
-	  log.g.gam <- log(g.gam)
+	  #g.gam <- (prod(diag(TT)^2*diag(D))^(-.5))*(nu*lambda+t(Y)%*%Y-t(W)%*%W)^(-(n+nu)/2) #(31)
+	  log.g.gam <- (-.5)*sum(log(diag(TT)^2*diag(D))) + (-(n+nu)/2)*log(nu*lambda+t(Y)%*%Y-t(W)%*%W) #(31) with logs
+	  #log.g.gam <- g.gam
 	}
 	else if(calcType == "nonconj"){
 	  
@@ -131,6 +146,7 @@ post.gam <- function(gam, X, Y, post_param){
 
 # Step 5: MCMC for gam
 run_MCMC <- function(X, Y, n_burn, n_samples, post_param) {
+  numacc <- 0
   p <- ncol(X)
   samples<-matrix(NA,n_samples,p)
   gam <-rep(0,p)
@@ -146,16 +162,20 @@ run_MCMC <- function(X, Y, n_burn, n_samples, post_param) {
   	diff <- post.gam(gam.new,X,Y, post_param)-post.gam(gam,X,Y, post_param)
   	r.exp <- min(exp(diff),1)
   	coin_flip <- rbinom(1,1,r.exp)
+  	
   	if(coin_flip==1){
   		gam <- gam.new
+  		if(i>n_burn) numacc <- numacc + 1 # keep track of how many are accepted
   	}
+  	
   	if(i>n_burn){
   		samples[i-n_burn,] <- gam
   	}
   	if(i%%1000==0) print(i)
   }
   return(list(
-    Samples = samples
+    Samples = samples,
+    AcceptanceRatio = numacc / n_samples
   ))
 }
 
@@ -164,42 +184,63 @@ run_MCMC <- function(X, Y, n_burn, n_samples, post_param) {
 # running out the simulation
 post_params <- list(v0 = 9.925*(10^(-6)), v1 = .0062034, nu = 5, lambda = .007^2, calcType = "fast")
 
-sample.data.orig <- create_sample_data.orig(n = 101, p=10, c(0,0,0,0,0,0,0,0,1,1)) # only last two stocks are important
-results <- run_MCMC(sample.data.orig$X, sample.data.orig$Y, n_burn = 1000, n_samples = 10000, post_param = post_params)
 
-colMeans(results$Samples)
-summary(lm(sample.data.orig$Y~sample.data.orig$X-1))
-#> colMeans(samples) seems to work fairly well, last two are highest by a lot
-# [1] 0.0460 0.0042 0.0106 0.6877 0.2717 0.0076 0.3385 0.5105 0.8991 0.9181
-
-# uncorrelated stocks
-sample.data.uncorr <- create_sample_data(n = 101, p=10, rho=0, c(0,0,0,0,0,0,0,0,1,1)) # only last two stocks are important
-results <- run_MCMC(sample.data.uncorr$X, sample.data.uncorr$Y, n_burn = 1000, n_samples = 10000, post_param = post_params)
-colMeans(results$Samples)
-summary(lm(sample.data.uncorr$Y~sample.data.uncorr$X-1))
-
-# note that multiplying by 100 or 1000 gives better results....
-results <- run_MCMC(100*sample.data.uncorr$X.ret, 100*sample.data.uncorr$Y.ret, n_burn = 1000, n_samples = 10000, post_param = post_params)
-colMeans(results$Samples)
-summary(lm(sample.data.uncorr$Y.ret~sample.data.uncorr$X.ret-1))
-
-# correlated stock samples
-sample.data.corr <- create_sample_data(n = 101, p = 10, rho=.5, c(0,0,0,0,0,0,0,0,1,1)) # only last two stocks are important
-results <- run_MCMC(sample.data.corr$X, sample.data.corr$Y, n_burn = 1000, n_samples = 10000, post_param = post_params)
-colMeans(results$Samples)
-summary(lm(sample.data.corr$Y~sample.data.corr$X-1))
-
-results <- run_MCMC(10000*sample.data.corr$X.ret, 10000*sample.data.corr$Y.ret, n_burn = 1000, n_samples = 10000, post_param = post_params)
-colMeans(results$Samples)
-summary(lm(sample.data.corr$Y.ret~sample.data.corr$X.ret-1))
+# sample.data.orig <- create_sample_data.orig(n = 101, p=10, c(0,0,0,0,0,0,0,0,1,1)) # only last two stocks are important
+# results <- run_MCMC(sample.data.orig$X, sample.data.orig$Y, n_burn = 1000, n_samples = 10000, post_param = post_params)
+# 
+# colMeans(results$Samples)
+# summary(lm(sample.data.orig$Y~sample.data.orig$X-1))
+# #> colMeans(samples) seems to work fairly well, last two are highest by a lot
+# # [1] 0.0460 0.0042 0.0106 0.6877 0.2717 0.0076 0.3385 0.5105 0.8991 0.9181
+# 
+# # uncorrelated stocks
+# sample.data.uncorr <- create_sample_data(n = 101, p=10, rho=0, c(0,0,0,0,0,0,0,0,1,1)) # only last two stocks are important
+# results <- run_MCMC(sample.data.uncorr$X, sample.data.uncorr$Y, n_burn = 1000, n_samples = 10000, post_param = post_params)
+# colMeans(results$Samples)
+# summary(lm(sample.data.uncorr$Y~sample.data.uncorr$X-1))
+# 
+# # note that multiplying by 100 or 1000 gives better results....
+# results <- run_MCMC(100*sample.data.uncorr$X.ret, 100*sample.data.uncorr$Y.ret, n_burn = 1000, n_samples = 10000, post_param = post_params)
+# colMeans(results$Samples)
+# summary(lm(sample.data.uncorr$Y.ret~sample.data.uncorr$X.ret-1))
+# 
+# # correlated stock samples
+# sample.data.corr <- create_sample_data(n = 101, p = 10, rho=.5, c(0,0,0,0,0,0,0,0,1,1)) # only last two stocks are important
+# results <- run_MCMC(sample.data.corr$X, sample.data.corr$Y, n_burn = 1000, n_samples = 10000, post_param = post_params)
+# colMeans(results$Samples)
+# summary(lm(sample.data.corr$Y~sample.data.corr$X-1))
+# 
+# results <- run_MCMC(10000*sample.data.corr$X.ret, 10000*sample.data.corr$Y.ret, n_burn = 1000, n_samples = 10000, post_param = post_params)
+# colMeans(results$Samples)
+# summary(lm(sample.data.corr$Y.ret~sample.data.corr$X.ret-1))
 
 
 # load the sample data from CRSP. Should be close to part 6
-crsp.data <- read.csv("../data/combined-data.csv", header = FALSE)
-Y <- crsp.data[1:300,1]
-X <- as.matrix(crsp.data[1:300,2:201])
+crsp.data <- read.csv(args$file, header = TRUE)
+Y <- crsp.data[,1]
+
+if(args$nstocks == -1){
+  samplesize <- ncol(crsp.data) - 1
+}else{
+  samplesize <- args$nstocks
+}
+inc.stocks <- sample(seq(2,ncol(crsp.data)), size = samplesize, replace = FALSE)
+X <- as.matrix(crsp.data[,inc.stocks])
+secs <- colnames(crsp.data)
 colnames(X) <- NULL
 
-crsp.results <- run_MCMC(X, Y, n_burn = 1000, n_samples = 1000, post_param = post_params)
+# run the MCMC
+ptm <- proc.time()
+crsp.results <- run_MCMC(X*100, Y*100, n_burn = args$nburn, n_samples = args$nsample, post_param = post_params)
+elapsed <- (proc.time() - ptm)[3]
+
 colMeans(crsp.results$Samples)
 plot(sort(colMeans(crsp.results$Samples), decreasing =TRUE))
+
+sortidx <- sort(colMeans(crsp.results$Samples), decreasing =TRUE, index.return=TRUE)$ix
+secs[sortidx+1]
+if(!is.na(args$output)){
+  save(crsp.results, file = paste0(args$ouput, ".RData"))
+}
+# run regressions against data to get betas
+# compare R^2s to "choose" how many assets to select
