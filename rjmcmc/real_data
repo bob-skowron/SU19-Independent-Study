@@ -1,0 +1,221 @@
+###########################################################################################
+# Author: Nick Syring
+# Contact: nasyrin@gmail.com, https://github.com/nasyring
+# Title: R codes for Bayesian dirichlet/gaussian regression, posterior sampling via RJ-MCMC
+###########################################################################################
+
+# Directions for use:
+#				
+#		1. Install and load the packages below: MCMCpack.
+#		...
+#
+
+
+# Necessary packages 
+library(MCMCpack)
+
+set.seed(54321)
+
+
+# True regression function
+
+mean.fun <- function(X) 0.2*X[,1] + 0.4*X[,3] + 0.4*X[,5] 
+  
+# The design matrix is a set of fake returns
+  
+x.sample <- function(n, size=6){
+
+	return(matrix(rnorm(n*size,0.08,.02),n,size))
+
+}
+
+  
+  
+# Likelihood ratio, used in MCMC sampling
+  
+  lr_func <- function(X,Y,betas1,betas2){
+    l.old = sum(dnorm(Y,X%*%matrix(betas1,length(betas1),1),sigma, log = TRUE)) 
+    l.new = sum(dnorm(Y,X%*%matrix(betas2,length(betas2),1),sigma, log = TRUE)) 
+    lr = exp(l.new-l.old)
+    return(lr)
+  }
+
+# prior ratio, used in MCMC sampling
+
+log_pr_func <- function(betas1,betas2){
+	betas1.nz<-betas1[betas1>0]
+	betas2.nz<-betas2[betas2>0]
+	n1<-length(betas1.nz)
+	n2<-length(betas2.nz)
+	p1 <- ddirichlet(betas1.nz, rep(1,n1))*dpois(n1,20)
+	p2 <- ddirichlet(betas2.nz, rep(1,n2))*dpois(n2,20)
+	return(log(p1)-log(p2))
+}
+
+
+  
+
+# Metropolis Hastings steps for beta, given selection
+  
+  mh_beta <- function( dprop, rprop, X,Y,betas) {
+    beta_prop <- betas
+    where.zeroes <- which(betas==0)
+    len.zero <- length(where.zeroes)
+	if(len.zero>0){
+		betas.nonzero <-betas[-where.zeroes]
+	}else {
+		betas.nonzero <-betas
+	}
+    u <- rprop(betas.nonzero)
+    if(len.zero>0){
+		beta_prop[-where.zeroes]<-u
+	}else {
+		beta_prop<-u
+	}
+    r <- log(lr_func(X,Y,betas,beta_prop)) + log_pr_func(beta_prop,betas)
+	if(len.zero>0){
+		r <-r+log(dprop(beta_prop[-where.zeroes] , u))-log(dprop(u, beta_prop[-where.zeroes]))
+	}else {
+		r <-r+log(dprop(beta_prop , u))-log(dprop(u, beta_prop))
+	}
+ 
+    R <- min(exp(r), 1)
+    if(runif(1) <= R ) {
+      betas <- beta_prop
+    } 
+    return(betas)
+  }
+  
+# MH proposal distribution
+  dprop <- function(x,theta){
+	theta<-ifelse(theta<.01,.01,theta)
+    return(ddirichlet(x, 6*theta))
+  }
+  
+  rprop <- function(theta){
+	theta<-ifelse(theta<.01,.01,theta)
+    return(rdirichlet(1, 6*theta))
+  }
+  
+  
+ #Looping rx Sweeps through the RJ-MCMC sampler
+ 
+  # response samples
+    n.MCMC <- 30000
+    n.burn <- 5000
+    n<-100
+    p<-ncol(X)
+    size<-round(p/15)
+    sigma <- .1
+    #x.samples <- x.sample(n,size)
+    #y.sample <- mean.fun(x.samples) + rnorm(n,0,sigma)
+
+  rx = n.MCMC + n.burn
+  betas_results = matrix(0,rx,p) 
+  
+  # Construction of an RJ-MCMC Sweep
+  
+  # Initial parameter values
+  indices<-sample.int(p,size)
+  I = rep(FALSE,p); I[indices]<-TRUE# initial selection
+  betas[indices] = rdirichlet(1,rep(30,size)); betas[-indices]<-0 # initial beta
+  bir = 0
+  dea = 0
+  mh.accept<-0
+
+	
+  
+  for(kx in 1:(n.burn+n.MCMC)){
+    
+  betas<-round(betas,3)
+  betas[betas>0]<-betas[betas>0]*(1/sum(betas))
+  I <- ifelse(betas>0,TRUE,FALSE)
+
+  # Metropolis-within Gibbs updates to Beta
+    betas.old<-betas
+  betas <-  mh_beta( dprop, rprop, x.samples,y.sample,betas)
+	if(any(betas.old!=betas)) mh.accept<-mh.accept+1
+
+  betas<-round(betas,3)
+  betas[betas>0]<-betas[betas>0]*(1/sum(betas))
+  I <- ifelse(betas>0,TRUE,FALSE)
+
+
+# Birth, Death, and Relocate moves
+    mu <- 20 #if small then penalty on inclusion
+    b <- (1/2)*ifelse(sum(I)<p,1,0)
+    d <- (1/2)*ifelse(sum(I)>1,1,0)
+    move <- rmultinom(1,1,c(b,d))
+    
+    # Birth
+    if(move[1] == 1){
+      
+      #determine new covariate and reset beta
+
+
+	where.zero <- which(betas==0)
+	betas.new<-betas
+	betas.nonzero <- betas[-where.zero]
+	num.nz <- length(betas.nonzero)
+	new.loc <- sample(where.zero,1)
+	u <- 1/(num.nz+1)
+	betas.new[-where.zero] <- betas[-where.zero]*(num.nz/(num.nz+1))
+	betas.new[new.loc]<-u
+	jump.prob <- b*lr_func(x.samples,y.sample,betas,betas.new)*exp(log_pr_func(betas.new,betas))
+
+	accept <- runif(1)<jump.prob
+
+	if(accept ){
+		betas <- betas.new
+		I[new.loc]<-TRUE
+		bir<-bir+1
+	}
+      
+    }
+    # Death
+    if(move[2] == 1){
+      
+	betas.new<-betas
+ 	where.nonzero <- which(betas!=0)
+	betas.nonzero <- betas[where.nonzero]
+	num.nz <- length(betas.nonzero)
+	new.loc <- sample(where.nonzero,1)
+	u <- betas.new[1,new.loc]
+	betas.new[where.nonzero] <- betas.new[where.nonzero]+u/(num.nz-1)
+	betas.new[new.loc]<- 0
+	jump.prob <- d*lr_func(x.samples,y.sample,betas,betas.new)*exp(log_pr_func(betas.new,betas))
+
+	accept <- runif(1)<jump.prob
+
+	if(accept ){
+		betas <- betas.new
+		I[new.loc]<-FALSE
+		dea<-dea+1
+	}
+
+
+    }
+    
+   
+    betas_results[kx,] = betas
+    if(kx%%100==0) print(kx)
+    #print(c(kx, dea, bir, rel, round(betas,3)))
+    #kx=kx+1
+  }
+
+# Posterior results
+colMeans(betas_results[(n.burn+1):(n.burn+n.MCMC),])
+[1] 0.190360000 0.002166285 0.279306968 0.132237146 0.391993032 0.003946569  # note the average should nearly sum to 1
+count.fcn <- function(vect) length(vect[vect>0])
+post.count<-apply(betas_results,1,count.fcn)
+post.mean<-colMeans(betas_results[(n.burn+1):(n.burn+n.MCMC),])
+hist(post.count)
+hist(post.mean)
+which(post.mean>0.01)
+post.mean[post.mean>=0.01]
+summary(lm(Y~X[,which(post.mean>0.01)]))
+summary(lm(Y~X[,which(post.mean>0.01)]))$adj.r.squared
+r.sq.avg<-0
+for(i in 1:1000) r.sq.avg<-r.sq.avg+summary(lm(Y~X[,sample(ncol(X),11)]))$adj.r.squared/1000
+r.sq.avg 
+ 
