@@ -1,19 +1,6 @@
 
-suppressWarnings(library(optparse))
 suppressMessages(suppressWarnings(library(futile.logger)))
 suppressMessages(suppressWarnings(library(dplyr)))
-
-option_list <- list(
-  make_option(c("-f", "--file"), action="store_true", type="character", help="File to be parsed"),
-  make_option(c("-n", "--nstocks"), action="store_true", type="integer", help="Number of stocks to include", default = -1),
-  make_option(c("-b", "--nburn"), action="store_true", type="integer", help="Number of burn-in"),
-  make_option(c("-s", "--nsamples"), action="store_true", type="integer", help="Number of samples"),
-  make_option(c("-o", "--outfile"), action="store_true", type="character", help="Output file")
-)
-args <- parse_args(OptionParser(option_list=option_list))
-
-
-flog.appender(appender.file("batchrun.log"), name="batch.io")
 ######################
 ####
 ####	Rough Codes for conjugate sampler for marginal posterior 
@@ -21,53 +8,6 @@ flog.appender(appender.file("batchrun.log"), name="batch.io")
 ####
 ####  
 ######################
-
-# Step 1: Data, Y index values, X stock (asset) values, ar(1) model of stocks
-create_sample_data.orig <- function(n,p,beta){
-  stock.vals <- matrix(0, n, p)
-  u <- runif(p, .2,1)
-  phi <- runif(p,.5,.8)
-  for(i in 1:n){
-    for(j in 1:p){
-      phi_j_power <- (rep(phi[j],1)^(1:1))
-      stock.vals[i,j] <- u[j] + ifelse(i>1,sum(stock.vals[1:min(i,1),j]*phi_j_power[1:min(i,1)]),0) + rnorm(1,0,.2)
-    }
-  }
-  
-  X <- stock.vals[2:n,]
-  Y <- X%*%beta+rnorm(n-1,0,1)
-  summary(lm(Y~X-1))
-  
-  return(list(X = X,Y = Y))
-}
-
-create_sample_data <- function(n, p, rho, beta) {
-  stock.vals <- matrix(0, n, p)
-  u <- runif(p, 1, 150) # stock starting values
-  sig <- runif(p, .08, .10) # stock stddev (1%-10% annual)
-  
-  rho.mat <- matrix(rho, nc=p, nr=p)
-  diag(rho.mat) <- 1
-  sigma.mat <- diag(sig/sqrt(252))%*%rho.mat%*%diag(sig/sqrt(252)) # cov matrix
-  
-  # set initial values
-  stock.vals[1,] <- u
-  
-  # create a bunch of (possibly correlated) stock returns
-  stock.returns <- MASS::mvrnorm(n-1, rep(0,p), Sigma = sigma.mat)
-  stock.cumret <- apply(stock.returns, 2, cumsum) # assume log returns
-  
-  stock.vals[2:n,] <- matrix(rep(u,n-1),ncol = 10, byrow = TRUE) * exp(stock.cumret) # turn into prices
-
-  # create return series, since that's what we'll regress on
-  X <- stock.vals
-  Y <- stock.vals%*%beta
-  X.ret <- stock.returns
-  Y.ret <- diff(stock.vals%*%beta)/(stock.vals[1:n-1,]%*%beta) # calculate the "index"
-  
-  return(list(X = X,Y = Y, X.ret = X.ret, Y.ret = Y.ret))
-}
-
 
 # Step 2:  
 log_likelihood <- function(params,X,Y){
@@ -113,11 +53,10 @@ post.gam <- function(gam, X, Y, post_param){
 	D <- diag(d1*gam+(1-gam)*d0) # (16)
 	R <- diag(1, p)
 	D.minusonehalf <- diag((1/sqrt(d1))*gam+(1-gam)*(1/sqrt(d0))) # (23)
-	
 	X_tilde <- rbind(X,D.minusonehalf) # (23)
 	Y<-as.matrix(Y)
 	Y_tilde <- as.matrix(c(Y,rep(0,p))) # (23)
-	
+
 	S2 <- t(Y_tilde)%*%Y_tilde-t(Y_tilde)%*%X_tilde%*%solve(t(X_tilde)%*%X_tilde)%*%t(X_tilde)%*%Y_tilde # (25)
 	
 	if(calcType == "fast"){
@@ -180,96 +119,3 @@ run_MCMC <- function(X, Y, n_burn, n_samples, post_param) {
     AcceptanceRatio = numacc / n_samples*100
   ))
 }
-
-
-# running out the simulation
-# running out the simulation
-post_params <- list(v0 = 9.925*(10^(-6)), v1 = .0062034, nu = 25, lambda = .007^2, calcType = "fast")
-
-
-# sample.data.orig <- create_sample_data.orig(n = 101, p=10, c(0,0,0,0,0,0,0,0,1,1)) # only last two stocks are important
-# results <- run_MCMC(sample.data.orig$X, sample.data.orig$Y, n_burn = 1000, n_samples = 10000, post_param = post_params)
-# 
-# colMeans(results$Samples)
-# summary(lm(sample.data.orig$Y~sample.data.orig$X-1))
-# #> colMeans(samples) seems to work fairly well, last two are highest by a lot
-# # [1] 0.0460 0.0042 0.0106 0.6877 0.2717 0.0076 0.3385 0.5105 0.8991 0.9181
-# 
-# # uncorrelated stocks
-# sample.data.uncorr <- create_sample_data(n = 101, p=10, rho=0, c(0,0,0,0,0,0,0,0,1,1)) # only last two stocks are important
-# results <- run_MCMC(sample.data.uncorr$X, sample.data.uncorr$Y, n_burn = 1000, n_samples = 10000, post_param = post_params)
-# colMeans(results$Samples)
-# summary(lm(sample.data.uncorr$Y~sample.data.uncorr$X-1))
-# 
-# # note that multiplying by 100 or 1000 gives better results....
-# results <- run_MCMC(100*sample.data.uncorr$X.ret, 100*sample.data.uncorr$Y.ret, n_burn = 1000, n_samples = 10000, post_param = post_params)
-# colMeans(results$Samples)
-# summary(lm(sample.data.uncorr$Y.ret~sample.data.uncorr$X.ret-1))
-# 
-# # correlated stock samples
-# sample.data.corr <- create_sample_data(n = 101, p = 10, rho=.5, c(0,0,0,0,0,0,0,0,1,1)) # only last two stocks are important
-# results <- run_MCMC(sample.data.corr$X, sample.data.corr$Y, n_burn = 1000, n_samples = 10000, post_param = post_params)
-# colMeans(results$Samples)
-# summary(lm(sample.data.corr$Y~sample.data.corr$X-1))
-# 
-# results <- run_MCMC(10000*sample.data.corr$X.ret, 10000*sample.data.corr$Y.ret, n_burn = 1000, n_samples = 10000, post_param = post_params)
-# colMeans(results$Samples)
-# summary(lm(sample.data.corr$Y.ret~sample.data.corr$X.ret-1))
-
-# load the sample data from CRSP. Should be close to part 6
-flog.info("Processing %s; NStocks: %s; NSamples: %s", args$outfile, args$nstocks, args$nsample, name = "batch.io")
-crsp.data <- read.csv(args$file, header = TRUE)
-
-flog.info("Loaded %s", args$file, name = "batch.io")
-
-if(args$nstocks == -1){
-  samplesize <- ncol(crsp.data) - 1
-}else{
-  samplesize <- args$nstocks
-}
-
-Y <- crsp.data[,1]
-inc.stocks <- sample(seq(2,ncol(crsp.data)), size = samplesize, replace = FALSE)
-X <- as.matrix(crsp.data[,2:201])
-secs <- colnames(crsp.data)
-colnames(X) <- NULL
-
-# run the MCMC
-flog.info("Starting MCMC", name = "batch.io")
-ptm <- proc.time()
-crsp.results <- run_MCMC(X*100, Y*100, n_burn = args$nburn, n_samples = args$nsample, post_param = post_params)
-#crsp.results <- run_MCMC(X*100, Y*100, n_burn = 1000, n_samples = 10000, post_param = post_params)
-flog.info("Completed MCMC in %s seconds; %s percent acceptance", (proc.time() - ptm)[3], crsp.results$AcceptanceRatio, name = "batch.io")
-
-#colMeans(crsp.results$Samples)
-sortidx <- sort(colMeans(crsp.results$Samples), decreasing =TRUE, index.return=TRUE)$ix
-orderedsecs <- secs[sortidx+1]
-
-# run regressions against data to get betas
-# compare R^2s to "choose" how many assets to select
-flog.info("Computing R-squareds", name = "batch.io")
-rsq.results <- NULL
-for(i in seq.int(1, samplesize)){
-  rsq.results <- bind_rows(rsq.results, c(Idx = i, AdjR2 = summary(lm(Y ~ X[,sortidx[1:i]]))$adj.r.squared))
-  #print(summary(lm(Y ~ X[,sortidx[1:i]]-1)))
-}
-
-out.folder <- paste0(args$outfile, "-", args$nsample, "-", samplesize)
-dir.create(out.folder, showWarnings = FALSE)
-
-pdf(paste0(out.folder, "/colmeans-plot.pdf"))
-plot(sort(colMeans(crsp.results$Samples), decreasing=TRUE), ylab = "Inclusion Rate")
-suppressMessages(dev.off())
-
-pdf(paste0(out.folder, "/rsq-plot.pdf"))
-plot(rsq.results$AdjR2, ylab = "Adjusted R Squared")
-suppressMessages(dev.off())
-
-save(crsp.results, file = paste0(out.folder, "/results.Rdata"))
-save(orderedsecs, file = paste0(out.folder, "/ordered-secs.Rdata"))
-save(rsq.results, file = paste0(out.folder, "/rsquareds.Rdata"))
-flog.info("Saved output file", name = "batch.io")
-
-# compare to top 5 by mkt cap
-# compare to top 5 stratified by sector 
-
