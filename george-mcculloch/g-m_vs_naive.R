@@ -71,64 +71,35 @@ gm.tickers <- colnames(sec.train)[which(colMeans(crsp.results$Samples) >= 0.8)]
 # want to only choose stocks that exist for the entire period....
 # get the top x largest stocks by mkt cap at the end of the train period/beginning of the 
 # test period
-sec.train.start <- sec.returns %>%
-  filter(datadate == train.end)
-
-top.stocks <- sec.train.start %>%
-  group_by(datadate) %>%
-  arrange(desc(mktcap)) %>%
-  mutate(
-    mktcap.rank = rank(desc(mktcap))
-  ) %>%
-  filter(mktcap.rank <= top.n.all) %>%
-  ungroup() %>%
-  dplyr::select(tic)
+sec.test.start <- sec.returns %>%
+  filter(datadate == train.end) %>%
+  filter(tic %in% colnames(sec.train))
 
 # get the top stock by gsector/ggroup/gsector/gsubind at the beginning
-top.stocks.gsector <- sec.train.start %>%
-  group_by(datadate, gsector) %>%
-  arrange(desc(mktcap)) %>%
-  mutate(
-    mktcap.rank = rank(desc(mktcap))
-  ) %>%
-  filter(mktcap.rank <= top.n.sector) %>%
-  ungroup() %>%
-  dplyr::select(tic)
+top.stocks <- function(securities, n, ...){
+  return(
+    securities %>%
+      group_by_(...) %>%
+      arrange(desc(mktcap)) %>%
+      mutate(
+        mktcap.rank = rank(desc(mktcap))
+      ) %>%
+      filter(mktcap.rank <= n) %>%
+      ungroup() %>%
+      dplyr::select(tic)
+  )
+}
 
-top.stocks.ggroup <- sec.train.start %>%
-  group_by(datadate, ggroup) %>%
-  arrange(desc(mktcap)) %>%
-  mutate(
-    mktcap.rank = rank(desc(mktcap))
-  ) %>%
-  filter(mktcap.rank <= top.n.sector) %>%
-  ungroup() %>%
-  dplyr::select(tic)
-
-top.stocks.gind <- sec.train.start %>%
-  group_by(datadate, gind) %>%
-  arrange(desc(mktcap)) %>%
-  mutate(
-    mktcap.rank = rank(desc(mktcap))
-  ) %>%
-  filter(mktcap.rank <= top.n.sector) %>%
-  ungroup() %>%
-  dplyr::select(tic)
-
-top.stocks.gsubind <- sec.train.start %>%
-  group_by(datadate, gsubind) %>%
-  arrange(desc(mktcap)) %>%
-  mutate(
-    mktcap.rank = rank(desc(mktcap))
-  ) %>%
-  filter(mktcap.rank <= top.n.sector) %>%
-  ungroup() %>%
-  dplyr::select(tic)
-
+groups <- c("datadate", "gsector", "ggroup", "gind", "gsubind")
+top.ns <- c(top.n.all, top.n.sector, top.n.sector, top.n.sector, top.n.sector)
+top.stocks.sel <- mapply(function(x, y) top.stocks(sec.test.start, y, "datadate", x), groups, top.ns)
 
 # compare the performance of thse portfolios
 Rb <- idx.test
 gm.ret <- Return.portfolio(sec.test[,gm.tickers], weights = gm.model)
+
+top.stocks.ret <- lapply(top.stocks.sel, function(x) Return.portfolio(sec.test[,x]))
+
 top.n.ret <- Return.portfolio(sec.test[,unlist(top.stocks, use.names = FALSE)])
 top.gsector.ret <- Return.portfolio(sec.test[,unlist(top.stocks.gsector, use.names = FALSE)]) 
 top.ggroup.ret <- Return.portfolio(sec.test[,unlist(top.stocks.ggroup, use.names = FALSE)]) 
