@@ -8,13 +8,14 @@ source("george_mcculloch.R")
 option_list <- list(
   make_option(c("-if", "--idxfile"), action="store_true", type="character", help="Index File to be parsed"),
   make_option(c("-sf", "--secfile"), action="store_true", type="character", help="Security File to be parsed"),
-  make_option(c("-n", "--nstocks"), action="store_true", type="integer", default = 50, help="Number of stocks to include"),
+  make_option(c("-n", "--nstocks"), action="store_true", type="integer", default = 5, help="Number of stocks to include"),
   make_option(c("-b", "--nburn"), action="store_true", type="integer", default = 1000, help="Number of burn-in"),
-  make_option(c("-s", "--nsamples"), action="store_true", type="integer", default = 10000, help="Number of samples"),
-  make_option(c("-tr", "--train"), action="store_true", type="integer", default = 250, help="Number of days over which to train"),
-  make_option(c("-ts", "--test"), action="store_true", type="integer", default = 250, help="Number of days over which to test"),
+  make_option(c("-s", "--nsamples"), action="store_true", type="integer", default = 1000, help="Number of samples"),
+  make_option(c("-tr", "--train"), action="store_true", type="integer", default = 200, help="Number of days over which to train"),
+  make_option(c("-ts", "--test"), action="store_true", type="integer", default = 20, help="Number of days over which to test"),
   make_option(c("-tna", "--topnall"), action="store_true", type="integer", default = 10, help="Number of top mkt cap stocks to use in naive test"),
   make_option(c("-tns", "--topnsec"), action="store_true", type="integer", default = 1, help="Number of top mkt cap stocks grouped by sector to use in naive test"),
+  make_option(c("-mp", "--minprob"), action="store_true", type="integer", default = 80, help="Prob for inclusion"),
   
   make_option(c("-o", "--outfile"), action="store_true", type="character", help="Output file")
 )
@@ -48,7 +49,9 @@ portfolio.stats <- function(port.returns, bmark.returns){
   )
 }
 
-flog.appender(appender.file(paste0(getwd(), "/naive.log")), name="naive.io")
+flog.appender(appender.file("naive.log"), name="naive.io")
+
+flog.info(print(args), name="naive.io")
 
 # input parameters
 idx.file <- args$idxfile #../data/2012-2018/sp500-returns.csv" # idx data file
@@ -61,12 +64,12 @@ top.n.all <- args$topnall #10
 top.n.sector <- args$topnsec #1
 
 # load the data
-flog.info("Loading data from files")
+flog.info("Loading data from files", name="naive.io")
 idx.returns <- read_csv(idx.file, col_names = TRUE)
 sec.returns <- read_csv(sec.file, col_names = TRUE)
 
 # clean the data
-flog.info("Setting up the data")
+flog.info("Setting up the data", name="naive.io")
 idx.xts <- idx.returns %>% dplyr::select(datadate, close) %>% timetk::tk_xts()
 colnames(idx.xts) <- "IDX"
 
@@ -77,7 +80,7 @@ sec.xts <- sec.returns %>%
 
 # single run
 # grab the training set
-flog.info("Splitting data into training and test sets")
+flog.info("Splitting data into training and test sets", name="naive.io")
 comb.data <- merge.xts(idx.xts, sec.xts, join="inner")
 comb.ret <- CalculateReturns(comb.data)[-1,] # exclude first date as it will be NA
 
@@ -86,22 +89,25 @@ train.seq <- seq.int(from = 1, to = dim(comb.ret)[1], by = test.period)
 all.series.ret <- xts()
 
 for(t in train.seq){
-  flog.info("Starting sequnce %s", t)
+  flog.info("Starting sequence %s", t, name="naive.io")
   train.start <- index(comb.data[t])
   train.end <- index(comb.data[(t-1)+train.period])
   test.start <- index(comb.data[t+train.period])
   test.end <- index(comb.data[t+train.period+test.period])
+  
+  flog.info("Train: %s:%s", as.character(train.start), as.character(train.end), name="naive.io")
+  flog.info("Test: %s:%s", as.character(test.start), as.character(test.end), name="naive.io")
   
   idx.train <- comb.ret[t:(t+train.period-1),1]
   sec.train <- comb.ret[t:(t+train.period-1),-1]
   sec.train <- sec.train[,apply(sec.train, 2, function(x) !any(is.na(x)))]
   
   # grab the test set
-  idx.test <- periodReturn(idx.xts, period=returnType)[(t+train.period):(t+train.period+test.period)]
-  sec.test <- CalculateReturns(sec.xts[,!is.na(sec.xts[1,])])[(t+train.period):(t+train.period+test.period)]
+  idx.test <- comb.ret[(t+train.period):(t+train.period+test.period),1]
+  sec.test <- comb.ret[(t+train.period):(t+train.period+test.period),-1]
   
   # run MCMC on training data
-  flog.info("Running the MCMC on the training data")
+  flog.info("Running the MCMC on the training data", name="naive.io")
   post_params <- list(v0 = 9.925*(10^(-6)), v1 = .0062034, nu = 25, lambda = .007^2, calcType = "fast")
   
   inc.stocks <- sample(seq(1,ncol(sec.train)), size = args$nstocks, replace = FALSE)
@@ -110,7 +116,7 @@ for(t in train.seq){
   
   # get top stocks to include
   # calculate their weights via lm
-  flog.info("Identify the model based on the MCMC results")
+  flog.info("Identify the model based on the MCMC results", name="naive.io")
   sortidx <- sort(colMeans(crsp.results$Samples), decreasing =TRUE, index.return=TRUE)$ix
   gm.sel <- sec.train[,which(colMeans(crsp.results$Samples) >= 0.8)] # make this a parameter
   gm.model <- unlist(lm(coredata(idx.train*100) ~ coredata(gm.sel*100)-1)$coefficients)
@@ -119,7 +125,7 @@ for(t in train.seq){
   # want to only choose stocks that exist for the entire period....
   # get the top x largest stocks by mkt cap at the end of the train period/beginning of the 
   # test period
-  flog.info("Compute the naive portfolios (top-n by sectors)")
+  flog.info("Compute the naive portfolios (top-n by sectors)", name="naive.io")
   sec.test.start <- sec.returns %>%
     filter(datadate == train.end) %>%
     filter(tic %in% colnames(sec.train))
@@ -129,7 +135,7 @@ for(t in train.seq){
   top.stocks.sel <- mapply(function(x, y) top.stocks(sec.test.start, y, "datadate", x), groups, top.ns)
   
   # compare the performance of thse portfolios
-  flog.info("Compare the performance of GM vs. naive")
+  flog.info("Compare the performance of GM vs. naive", name="naive.io")
   gm.ret <- Return.portfolio(sec.test[,gm.tickers], weights = gm.model)
   top.stocks.ret <- lapply(top.stocks.sel, function(x) Return.portfolio(sec.test[,x]))
   
@@ -137,9 +143,23 @@ for(t in train.seq){
   merged.ret <- do.call(merge, all.port.ret)           # merge all objects in list
   colnames(merged.ret) <- c("GM", "Top", "Sector", "Group", "Ind", "SubInd")
   
-  all.series.ret <- append(all.series.ret, merged.ret)
-  
-  print(lapply(all.port.ret, function(x) portfolio.stats(x, idx.test)))
+  if(t == 1){
+    all.series.ret <- merged.ret
+  }else{
+    all.series.ret <- rbind(all.series.ret, merged.ret)
+  }
+  flog.info(print(lapply(all.port.ret, function(x) portfolio.stats(x, idx.test))), name="naive.io")
+  save(all.series.ret, file = "dump")
 }
+
+idx.test <- merge.xts(comb.ret[,1], all.series.ret, join="inner")[,"IDX"]
+sec.test <- merge.xts(comb.ret[,1], all.series.ret, join="inner")[,-1]
+
+lapply(sec.test, function(x) portfolio.stats(x, idx.test))
+
+chart.CumReturns(merge.xts(comb.ret[,1], all.series.ret, join="inner"), wealth.index = TRUE)
+chart.CumReturns(merge.xts(comb.ret["2018/",1], all.series.ret["2018/",], join="inner"), wealth.index = TRUE, legend.loc = "bottomright")
+
+save(all.series.ret, file = "dump")
 
 
