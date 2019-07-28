@@ -151,7 +151,7 @@
 
 
 \begin{abstract}
-
+	We review approaches to solving the limited asset index tracking problem in investment management. We discuss reasons for utilizing Bayesian approaches and refresh some previous papers. Completing the paper we discuss potential applications of Generalized Fiducial Inference to the problem and areas for continued research.
 
 
 \smallskip
@@ -164,7 +164,7 @@
 \section{Introduction}
 \label{S:intro}
 
-Stock indices like the S\&P 500 and Russell 5000 are large, diverse groups of assets especially attractive to investors.  However, most investors cannot afford to invest in even a moderate portion of the assets these indices include due to several reasons such as the high costs associated with holding many different assets and the difficulty of managing a portfolio including so many different assets.  Therefore investors seek to closely replicate or track the performance of a whole index by carefully selecting a small, manageable subset of its assets. 
+Stock indices like the S\&P 500 and Russell 2000 are large, diverse groups of assets especially attractive to investors.  However, for active investors, it can be difficult to invest in even a moderate portion of the assets in these indices due to several reasons such as the costs associated with holding many assets and the difficulty of managing a portfolio of many assets.  Therefore investors seek to closely replicate or track the performance of a whole index by carefully selecting a small, manageable subset of its assets and deploying excess capital to more direct areas of focus.
 
 The most straightforward way to solve the index tracking problem is to pose it as an optimization problem in which one minimizes a measure of the tracking error over acceptable portfolios.  Difficulties with this approach arise if one includes practical considerations in the optimization problem such as bounds on the number of assets and amounts invested in each, which take the form of constraints; see, e.g. Fastrich et al. (2014) and Benidis et al. (2018).  These constrained optimizations often can be solved using mixed integer programming but may converge slowly for high-dimensional data.  
 
@@ -172,25 +172,6 @@ Other approaches to index tracking involve replacing the tracking error minimiza
 
 In contrast to optimization methods, Bayesian methods for index tracking output a range of potential portfolios rather than a single solution.  George and McCulloch (1997) regress index returns on asset returns and use a spike and slab type prior to encourage sparsity in the number of assets selected to remain in the model.  The marginal posterior of included assets can quantify the uncertainty in asset selection, better enabling the financial analyst to make a final subjective judgement.  Variations on the approach in George and McCulloch (1997) involve different prior specifications of sparsity, such as the SCAD penalty of Fan and Li (2001).  A new Bayesian-like generalized fiducial approach to sparse regression was introduced in Williams and Hannig (2019).  Rather than directly encouraging sparse portfolios, the generalized fiducial approach limits acceptable portfolios to those with only minimally correlated assets.  
        
-
-\section{What should/can we do?}
-
-\begin{itemize}
-	\item[Optimization]
-		\begin{itemize}
-		\item Implement Benidis et al. (2018) optimization approaches for setups we find interesting, setups meaning different constraints present on either number of assets or amount held or long-only portfolios, etc.
-	\end{itemize}
-	\item[Bayesian]
-	\begin{itemize}
-		\item Extend the basic approach in George and McCulloch (1997) to include portfolio constraints as in Benidis et al. (2018).  The point of this would be to compare to the optimization approaches in Benidis et al. (2018) and see how valuable the Bayesian uncertainty quantification could be.  How much does the optimal solution differ from the posterior?  How wide is the posterior and how far can you get from the optimum while maintaining acceptable performance.
-	\end{itemize}
-	\item[Gen. fid.]
-		\begin{itemize}
-			\item Implement Williams and Hannig (2019) approach on index data.
-			\item Tweak Williams and Hannig (2019) definition 2.1 of $\eps-$admissibility to account for additional constraints, like those in Benidis et al. (2018).
-			\item Compare performance to George and McCulloch (1997), optimization approaches.
-	\end{itemize}
-\end{itemize}
 
 \section*{Optimization}
 
@@ -210,12 +191,47 @@ The primary challenge is the presence of the nonconvex penalty $\lambda||\textbf
 \section{Basic Bayesian methods}
 
 George and McCulloch (1997) presents methods for variable selection in regression from a Bayesian viewpoint.  Their primary application is construction of index-tracking portfolios.  They begin with a regression model of the index returns
-\[\textbf{r}^b = X\textbf{w} + \textbf{\epsilon}\]
-where $\textbf{\epsilon}\sim \nm_T(0,\sigma^2I_{T\times T})$.  Such a regression model is somewhat artificial because the index returns actually are a \emph{deterministic} linear combination of the constituent asset returns.  However, since the Gaussian kernel contains the (negative) empirical tracking error, maximizing the likelihood of (a sparse version of) the model is equivalent to minimizing the empirical tracking error.  To achieve sparsity in the predictors and hence a small portfolio George and McCulloch (1997) consider independent Bernoulli priors of the form
+$\mathbf{r}^b = X \mathbf{w} + \mathbf{\epsilon}$
+where $\mathbf{\epsilon}\sim \nm_T(0,\sigma^2I_{T\times T})$.  Such a regression model is somewhat artificial because the index returns actually are a \emph{deterministic} linear combination of the constituent asset returns.  However, since the Gaussian kernel contains the (negative) empirical tracking error, maximizing the likelihood of (a sparse version of) the model is equivalent to minimizing the empirical tracking error.  To achieve sparsity in the predictors and hence a small portfolio George and McCulloch (1997) consider independent Bernoulli priors of the form
 \begin{align}
 \pi(\gamma) = \prod_{i=1}^N\alpha_i^{\gamma_i}(1-\alpha_i)^{(1-\gamma_i)}
 \end{align}
 for $\alpha_i\in(0,1)$ and where $\gamma \in \{0,1\}^N$ denotes which assets are included in the portfolio.  
+
+
+\section{Revisiting George and McCulloch (1997)}
+
+To begin our analysis, we first begin by refreshing the analysis performed in George and McCulloch (1997) (G\&M) and providing some additional insights. Using the Wharton Research Data Services (WRDS) we obtain weekly returns for stocks in the S\&P 500 from January 2012 to December 2018. Following the methodology laid out in Section 6 of G\&M we compute the marginal probabilities of inclusion for the stocks. Utilizing 200 randomly chosen stocks, as in their example, we can observe a similar distribution of marginal inclusion probabilities where a small number are nearly always included and rapidly fall off with fewer than 50 stocks being selected more than a handful of iterations.
+
+{\color{red} Insert plots here for marginal probabilities}
+
+G\&M continue by running nested regressions and identifying the incremental explanatory power as measured by $R^2$ of each additional candidate stock. Here, we break from G\&M and explore two different measures, in-sample and post tracking error.
+
+{\color{red} Insert plots here for tracking error}
+{\color{red} Insert plots here for cumulative returns}
+
+G\&M also makes no comment about the selection of the stocks. For example, looking at those top several stocks that appear to be chosen almost always, do those remain consistent over multiple iterations? Or, particularly due to the correlation structure inherent in the stock market, do we see patterns emerge where highly correlated stocks might be chosen as equivalents?
+
+{\color{red} Insert plots here for distributions by stocks of inclusion probability}
+
+
+
+\begin{itemize}
+	\item[Optimization]
+		\begin{itemize}
+		\item Implement Benidis et al. (2018) optimization approaches for setups we find interesting, setups meaning different constraints present on either number of assets or amount held or long-only portfolios, etc.
+	\end{itemize}
+	\item[Bayesian]
+	\begin{itemize}
+		\item Extend the basic approach in George and McCulloch (1997) to include portfolio constraints as in Benidis et al. (2018).  The point of this would be to compare to the optimization approaches in Benidis et al. (2018) and see how valuable the Bayesian uncertainty quantification could be.  How much does the optimal solution differ from the posterior?  How wide is the posterior and how far can you get from the optimum while maintaining acceptable performance.
+	\end{itemize}
+	\item[Gen. fid.]
+		\begin{itemize}
+			\item Implement Williams and Hannig (2019) approach on index data.
+			\item Tweak Williams and Hannig (2019) definition 2.1 of $\eps-$admissibility to account for additional constraints, like those in Benidis et al. (2018).
+			\item Compare performance to George and McCulloch (1997), optimization approaches.
+	\end{itemize}
+\end{itemize}
 
 \subsection{With constraints}
 
@@ -245,7 +261,18 @@ The posterior density $\pi_n$ of $(\gamma, \textbf{w})$ given the data is propor
 
 A note about computing the ``acceptance ratio": the dimensions of $\gamma^\star$ and $\textbf{w}^i$ may not match, so how should one perform the computation? When computing $\pi_n(\gamma^\star, \textbf{w}^i)$, normalize $\textbf{w}^i$ to the $1$'s indices of $\gamma^\star$.      
 }
+{\color{red} Not sure what to put here}
 
+However, while theoretically an alternative option to optimization problems, the implementation the reversible jump Markov Chain Monte Carlo requires considerable time to converge. This limitation puts this methodology out of consideration for many portfolio managers.
+
+\section{Conclusion}
+
+In this paper 
+
+{\color{red} discuss additional potential areas of research}
+Using the density of the selection to determine regime
+Further GFI research
+Use of the stocks selected to reduce the parameter set
 
 \section*{References}
 
@@ -261,6 +288,8 @@ Oracle Properties. \emph{Journal of American Statistical Association}~96, 1348â€
 \item{} Fastrich, B., Paterlini, S. and Winker, P.~(2015). Constructing optimal sparse portfolios using regularization methods. \emph{Comput Manag Sci}~12(3) 417â€“434. https://doi.org/10.1007/s10287-014-0227-5
 
 \item{} George, E. I., and McCulloch, R. E.~(1997). Approaches for Bayesian variable selection. \emph{Statistica Sinica}~7, 339-373.
+
+\item{} Hastie, D. I. and Green, P. J. (2012), Model choice using reversible jump Markov chain Monte Carlo. Statistica Neerlandica, 66: 309-338. doi:10.1111/j.1467-9574.2012.00516.x
 
 \item{} Puelz, D., Hahn, R. and Carvalho, Carlos M.~(2018). Sparse Mean-Variance Portfolios: A Penalized Utility Approach. \url{https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2729504}.
 
