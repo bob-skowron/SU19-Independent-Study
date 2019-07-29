@@ -10,6 +10,7 @@
 \usepackage[usenames]{color}
 \usepackage{fullpage}
 \usepackage{setspace}
+\usepackage{subfigure}
 
 %\RequirePackage[OT1]{fontenc} 
 %\RequirePackage[colorlinks]{hyperref}
@@ -17,6 +18,8 @@
 
 
 %\numberwithin{equation}{section} 
+
+\graphicspath{ {./images/} } 
 
 \theoremstyle{plain} 
 \newtheorem{theorem}{Theorem}
@@ -151,12 +154,12 @@
 
 
 \begin{abstract}
-	We review approaches to solving the limited asset index tracking problem in investment management. We discuss reasons for utilizing Bayesian approaches and refresh some previous papers. Completing the paper we discuss potential applications of Generalized Fiducial Inference to the problem and areas for continued research.
+	We review approaches to solving the limited asset index tracking problem in investment management. We discuss reasons for utilizing Bayesian approaches and refresh some previous papers. Completing the paper, we discuss potential applications of Generalized Fiducial Inference to the problem and areas for continued research.
 
 
 \smallskip
 
-\emph{Keywords and phrases:} Index tracking, regularization, variable selection, Bayesian inference, generalized fiducial inference, Markov chain Monte Carlo.
+\emph{Keywords and phrases:} Index tracking, regularization, variable selection, Bayesian inference, generalized fiducial inference, Markov chain Monte Carlo fo
 
 \end{abstract}
 
@@ -203,7 +206,18 @@ for $\alpha_i\in(0,1)$ and where $\gamma \in \{0,1\}^N$ denotes which assets are
 
 To begin our analysis, we first begin by refreshing the analysis performed in George and McCulloch (1997) (G\&M) and providing some additional insights. Using the Wharton Research Data Services (WRDS) we obtain weekly returns for stocks in the S\&P 500 from January 2012 to December 2018. Following the methodology laid out in Section 6 of G\&M we compute the marginal probabilities of inclusion for the stocks. Utilizing 200 randomly chosen stocks, as in their example, we can observe a similar distribution of marginal inclusion probabilities where a small number are nearly always included and rapidly fall off with fewer than 50 stocks being selected more than a handful of iterations.
 
+
 {\color{red} Insert plots here for marginal probabilities}
+\begin{figure}
+\hfill
+\subfigure[Title A]{\includegraphics[width=5cm]{colmeans-plot-orig}}
+\hfill
+\subfigure[Title B]{\includegraphics[width=5cm]{colmeans-plot-recent}}
+\hfill
+\caption{Title for both}
+\end{figure}
+
+
 
 G\&M continue by running nested regressions and identifying the incremental explanatory power as measured by $R^2$ of each additional candidate stock. Here, we break from G\&M and explore two different measures, in-sample and post tracking error.
 
