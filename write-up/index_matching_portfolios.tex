@@ -11,6 +11,9 @@
 \usepackage{fullpage}
 \usepackage{setspace}
 \usepackage{subfigure}
+\usepackage{float}
+\usepackage{hyperref}
+
 
 %\RequirePackage[OT1]{fontenc} 
 %\RequirePackage[colorlinks]{hyperref}
@@ -159,7 +162,7 @@
 
 \smallskip
 
-\emph{Keywords and phrases:} Index tracking, regularization, variable selection, Bayesian inference, generalized fiducial inference, Markov chain Monte Carlo fo
+\emph{Keywords and phrases:} Index tracking, regularization, variable selection, Bayesian inference, generalized fiducial inference, Markov chain Monte Carlo.
 
 \end{abstract}
 
@@ -206,15 +209,14 @@ for $\alpha_i\in(0,1)$ and where $\gamma \in \{0,1\}^N$ denotes which assets are
 
 To begin our analysis, we first begin by refreshing the analysis performed in George and McCulloch (1997) (G\&M) and providing some additional insights. Using the Wharton Research Data Services (WRDS) we obtain weekly returns for stocks in the S\&P 500 from January 2012 to December 2018. Following the methodology laid out in Section 6 of G\&M we compute the marginal probabilities of inclusion for the stocks. Utilizing 200 randomly chosen stocks, as in their example, we can observe a similar distribution of marginal inclusion probabilities where a small number are nearly always included and rapidly fall off with fewer than 50 stocks being selected more than a handful of iterations.
 
-
-{\color{red} Insert plots here for marginal probabilities}
-\begin{figure}
+\begin{figure}[H]
+\centering
 \hfill
-\subfigure[Title A]{\includegraphics[width=5cm]{colmeans-plot-orig}}
+\subfigure[Replication of 1985-1991 analysis]{\includegraphics[width=5cm]{colmeans-plot-orig}}
 \hfill
-\subfigure[Title B]{\includegraphics[width=5cm]{colmeans-plot-recent}}
+\subfigure[Algorithm applied to 2012-2018]{\includegraphics[width=5cm]{colmeans-plot-recent}}
 \hfill
-\caption{Title for both}
+\caption{George and McCulloch algorithm applied to 1985-1991 and 2012-2018 weekly returns for S\&P 500}
 \end{figure}
 
 
@@ -224,10 +226,19 @@ G\&M continue by running nested regressions and identifying the incremental expl
 {\color{red} Insert plots here for tracking error}
 {\color{red} Insert plots here for cumulative returns}
 
-G\&M also makes no comment about the selection of the stocks. For example, looking at those top several stocks that appear to be chosen almost always, do those remain consistent over multiple iterations? Or, particularly due to the correlation structure inherent in the stock market, do we see patterns emerge where highly correlated stocks might be chosen as equivalents?
+G\&M also makes no comment about the selection of the stocks. For example, looking at those top several stocks that appear to be chosen almost always, do those remain consistent over multiple iterations? Or, particularly due to the correlation structure inherent in the stock market, do we see patterns emerge where highly correlated stocks might be chosen as equivalents? As it turns out, the top stocks selected are frequently the same. Over numerous iterations, we identify stocks such as AAPL, AMZN, BA, XOM, \& MSFT frequently near the top selected. Annecdotally, this makes sense as these correspond to the largest market cap stocks or significant drivers of returns in recent years.
 
-{\color{red} Insert plots here for distributions by stocks of inclusion probability}
+However, it also begs the question of whether or not a naive approach to stock selection would do just as well. To investigate this, we use the same period of data (2012-2018) and compare both the in and out of sample performance of the G\&M algorithm to five different naive algorithms:
+\begin{itemize}
+	\item[1.] Selecting to the top 10 stocks by market cap
+	\item[2.] Selecting the top stock in each GICS Sector by market cap ($\approx 10$)
+	\item[3.] Selecting the top stock in each GICS Group by market cap ($\approx 25$)
+	\item[4.] Selecting the top stock in each GICS Industry by market cap ($\approx 70$)
+	\item[5.] Selecting the top stock in each GICS Sub-industry by market cap ($\approx 150$)
+\end{itemize}
+where GICS refers to the Global Industry Classification Standard. The G\&M algorithm is run on 250 days of data (approximately 1 year) and any stock that has a marginal inclusion probability of greater than 80\% is selected. For the same date, we construct the above naive portfolios using equal weighted contributions from the selected stocks. The portfolios are then held for 20 days (approximately 1 month) after which we rebalance the portfolios using the same logic and repeat until the end of 2018.
 
+{\color{red} Add plots here showing tracking error and performance}
 
 
 \begin{itemize}
@@ -256,14 +267,10 @@ The basic hierarchical model of George and McCulloch (1997) places a normal prio
 \sigma^2 | \gamma & \sim \text{IG}(\nu/2,\,\nu\lambda_\gamma/2)\\
 \textbf{w}|\gamma, \sigma^2 & \sim Dir(||\gamma||_0; \beta).
 \end{align}
-{\color{red} I'm unconvinced it is important to include $\sigma^2$ rather than just set it equal to 1.}
 
-Here the asset weights are given a Dirichlet prior conditional on the included assets.  This prior enforces the constraints $\textbf{w}^\top 1_{N\times 1}=1$ and $\textbf{w}\geq 0_{N\times 1}$.
+Here the asset weights are given a Dirichlet prior conditional on the included assets.  This prior enforces the constraints $\textbf{w}^\top 1_{N\times 1}=1$ and $\textbf{w}\geq 0_{N\times 1}$. Implementing this model is difficult in practice as it requires us to utilize Reversible Jump MCMC in order to change candidate stock inclusions. Roughly, the algorithm is as follows:
 
-{\color{blue} It is not obvious how to sample the posterior, which is not of a simple conjugate form.  Most likely, we would use a reversible jump MCMC algorithm.}
-
-\ifthenelse{1=1}{}{
-The posterior density $\pi_n$ of $(\gamma, \textbf{w})$ given the data is proportional to the likelihood times the prior density, and can be sampled using, for instance, Metropolis-Hastings within a Gibbs sampler.  Roughly, it would go like this:
+The posterior density $\pi_n$ of $(\gamma, \textbf{w})$ given the data is proportional to the likelihood times the prior density, and can be sampled using, for instance, Metropolis-Hastings within a Gibbs sampler.
 
 \begin{enumerate}
 	\item Begin with the $i^{th}$ sample $(\gamma^i, \textbf{w}^i)$.
@@ -273,20 +280,26 @@ The posterior density $\pi_n$ of $(\gamma, \textbf{w})$ given the data is propor
 	\item Generate $U\sim \unif(0,1)$ and accept $\gamma^{i+1}=\gamma^\star$ if $\exp(a)>U$.  
 \end{enumerate}
 
-A note about computing the ``acceptance ratio": the dimensions of $\gamma^\star$ and $\textbf{w}^i$ may not match, so how should one perform the computation? When computing $\pi_n(\gamma^\star, \textbf{w}^i)$, normalize $\textbf{w}^i$ to the $1$'s indices of $\gamma^\star$.      
-}
-{\color{red} Not sure what to put here}
+However, while theoretically an alternative option to optimization problems, the implementation requires considerable time to converge. As an example, over several tens of thousands of iterations, if the number of candidate stocks was larger than 25 the algorithm rarely moved significantly away from equal weighting. This limitation puts this methodology out of consideration for many portfolio managers.
+For more information about the reversible jump MCMC, see Hastie and Green (2012).
 
-However, while theoretically an alternative option to optimization problems, the implementation the reversible jump Markov Chain Monte Carlo requires considerable time to converge. This limitation puts this methodology out of consideration for many portfolio managers.
+\section{Generalized Fiducial Inference}
+Fiducial Inference is an area of statistical inference original proposed by R.A. Fisher to attempt to find distributional representations of variables without requiring priors. While originally dismissed, recently research in Generalized Fiducial Inference (GFI) has identified some potentially valuable applications. In particular, we want to point out the recent paper of Williams and Hannig (2018). In their paper, they explore the use of GFI for variable selection in cases where the data is highly collinear. Particularly in the financial world where assets can be highly correlated, this appears to be an interesting topic to explore.
+
+Williams and Hanning (2018) describe an approach where the underlying premise is that the non-zero parameters are non-redundant in that they contain the minimal amount of information to explain or predict the observed data. These subsets are referred to as \textit{$\epsilon$-admissible}. Utilizing the code provided by Mr. Williams, with some adjustments, we attempted to apply the algorithm to our 2012-2018 returns data. Our observations were that the approach did correctly narrow down to approximately 6-10 stocks to best track. However, the selections were widely varying as contrasted with the George and McCulloch algorithm.
+
+There are additional areas for future research here. First, if the top stocks selected are optimal, can we identify the related $\epsilon$-admissible subsets to use in analyzing highly correlated alternative choices. That is, do the {$\epsilon$-admissible subsets beget some information about the inherent structure of the market? Secondly, given the fact that it does appear to accurately reduce the dimension of the problem, can this be applied as an initial filter to a more 
 
 \section{Conclusion}
 
-In this paper 
+In this paper we review some of the materials and common methods used in asset management to identify sparse sets of securities for index tracking. 
 
 {\color{red} discuss additional potential areas of research}
 Using the density of the selection to determine regime
 Further GFI research
 Use of the stocks selected to reduce the parameter set
+
+All code utilized in the analysis for this paper can be found on Github: \href{https://github.com/bob-skowron/SU19-Independent-Study}{https://github.com/bob-skowron/SU19-Independent-Study}
 
 \section*{References}
 
@@ -294,12 +307,11 @@ Use of the stocks selected to reduce the parameter set
 
 \item{} Benidis, K., Feng, Y., and Palomar, D. P.~(2018). Sparse Portfolios for High-Dimensional Financial Index Tracking. \emph{IEEE Transactions on Sigmal Processing}~66(1), 155-170.
 
-\item{} Fan, J., and Li, R.~(2001). Variable Selection via Nonconcave Penalized Likelihood and its
-Oracle Properties. \emph{Journal of American Statistical Association}~96, 1348–1360.
+\item{} Fan, J., and Li, R.~(2001). Variable Selection via Nonconcave Penalized Likelihood and its Oracle Properties. \emph{Journal of American Statistical Association}~96, 1348–1360.
 
-\item{} Fastrich, B., Paterlini, S., and Winker, P.~(2014). Cardinality versus q-norm constraints for index tracking. \emph{Quantitative Finance}~14(11), 2019-2032, DOI: 10.1080/14697688.2012.691986
+\item{} Fastrich, B., Paterlini, S., and Winker, P.~(2014). Cardinality versus q-norm constraints for index tracking. \emph{Quantitative Finance}~14(11), 2019-2032, \\DOI: 10.1080/14697688.2012.691986
 
-\item{} Fastrich, B., Paterlini, S. and Winker, P.~(2015). Constructing optimal sparse portfolios using regularization methods. \emph{Comput Manag Sci}~12(3) 417–434. https://doi.org/10.1007/s10287-014-0227-5
+\item{} Fastrich, B., Paterlini, S. and Winker, P.~(2015). Constructing optimal sparse portfolios using regularization methods. \emph{Comput Manag Sci}~12(3) 417–434. \\https://doi.org/10.1007/s10287-014-0227-5
 
 \item{} George, E. I., and McCulloch, R. E.~(1997). Approaches for Bayesian variable selection. \emph{Statistica Sinica}~7, 339-373.
 
@@ -310,11 +322,6 @@ Oracle Properties. \emph{Journal of American Statistical Association}~96, 1348�
 \item{} Williams, J. P., and Hannig, J.~(2019). Non-Penalized Variable Selection In High-Dimensional Linear Model Settings Via Generalized Fiducial Inference. \emph{Annals of Statistics}.~47(3), 1723-1753. 
 
 \end{description}
-
-
-
-
-
 
 \end{document}
 
