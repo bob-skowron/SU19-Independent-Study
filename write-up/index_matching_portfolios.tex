@@ -200,7 +200,7 @@ The primary challenge is the presence of the nonconvex penalty $\lambda||\textbf
 
 Other potential methods of solving this problem include mixed integer programming, genetic algorithms. However, it is not possible to guarantee optimality using these methods and they often come with a considerable performance cost. Other heuristic methods can also be applied. For example, one could solve the unconstrained optimization problem and identify the most significant contributors. Then, secondary optimizations could be run with the limited set of assets and constraints can be specified as a constant per choice of assets.
 
-Regardless of the methodology, these methods all result in singular solutions. Given that we are using high dimensional, correlated data, the the empirical covariance matrix can often be ill-conditioned which can result in highly sensitive results. In the next section, we discuss Bayesian methods which provide distributional results which may help alleviate some of those issues.
+Regardless of the methodology, these methods all result in singular solutions (although one could run numerous iterations while varying the sparsity parameter). Given that we are using high dimensional, correlated data, the the empirical covariance matrix can often be ill-conditioned which can result in highly sensitive results. In the next section, we discuss Bayesian methods which provide distributional results which may help alleviate some of those issues.
 
 \section{Bayesian methods}
 
@@ -216,19 +216,21 @@ for $\alpha_i\in(0,1)$ and where $\gamma \in \{0,1\}^N$ denotes which assets are
 \end{align}
 where $v_0$ and $v_1$ can be constant or varying based say on the number of non-zero gammas. For the problem at hand, this construction poses two challenges. First, it does not guarantee that $\beta_i$ will not be less than zero (i.e. a long-only constraint) and secondly, that $\sum\beta_i=1$ (i.e. no leverage constraint).
 
-Solving this problem is accomplished by running MCMC with a Gibbs sampler.
+The posterior density $\pi_n(\gamma)$ given the data is proportional to the likelihood times the prior density, and can be sampled using, for instance, Metropolis-Hastings within a Gibbs sampler.
+
 \begin{algorithm}
 \caption{MCMC for spike and slab}
-\begin{algorithmic} 
+\begin{algorithmic}[1] 
 \STATE $\gamma_i = 0 \forall i$
 \WHILE{$n<N$}
-\STATE Choose $i$ and set $\gamma_i = 1-\gamma_i$
-\STATE Compute the change in the log posterior $\pi(\gamma|Y)=r$ 
-\STATE Randomly sample from a $Binomial(1,\min(e^{r}, 1))$
-\IF{Sample = 1}
-\STATE Accept the proposed $\gamma$
+\STATE Propose a new sample of $\gamma$, call it $\gamma^\star$, by randomly drawing an index $i$ and setting $\gamma^\star_i=1-\gamma_i$
+\STATE Compute the acceptance ratio (on the log scale):
+	\[a=\log \pi_n(\gamma^\star) - \log \pi_n(\gamma^i) + \log \pi(\gamma^i) - \log \pi(\gamma^\star)\]
+\STATE Generate $U\sim \unif(0,1)$
+\IF {$\exp(a)>U$}
+\STATE Accept $\gamma^{n+1}=\gamma^\star$
 \ELSE
-\STATE Reject the proposed $\gamma$
+\STATE Reject the proposed $\gamma^\star$
 \ENDIF
 \ENDWHILE
 \end{algorithmic}
@@ -237,7 +239,7 @@ Solving this problem is accomplished by running MCMC with a Gibbs sampler.
 
 \subsection{Revisiting George and McCulloch (1997)}
 
-To begin our analysis, we start by refreshing the example performed in George and McCulloch (1997) and providing some additional insights. Using the Wharton Research Data Services (WRDS) we obtain weekly returns for stocks in the S\&P 500 from January 2012 to December 2018. Following the methodology laid out in Section 6 of George and McCulloch (1997) we compute the marginal probabilities of inclusion for the stocks. Utilizing 200 randomly chosen stocks, as in their example, we can observe a similar distribution of marginal inclusion probabilities where a small number are nearly always included and rapidly fall off with fewer than 50 stocks being selected more than a handful of iterations.
+To begin our analysis, we start by refreshing the example performed in George and McCulloch (1997) and providing some additional insights. Using the Wharton Research Data Services (WRDS) we obtain weekly returns for stocks in the S\&P 500 from January 2012 to December 2018. Following the methodology laid out in Section 6 of George and McCulloch (1997) we compute the marginal probabilities of inclusion for the stocks. Utilizing 200 randomly chosen stocks, as in their example, we can observe a similar nature of marginal inclusion probabilities where a small number are nearly always included and rapidly fall off with fewer than 50 stocks being selected more than a handful of iterations.
 
 \begin{figure}[H]
 \subfigure[Replication of 1985-1991 analysis]{\includegraphics[width=8cm]{colmeans-plot-orig}}
@@ -246,20 +248,19 @@ To begin our analysis, we start by refreshing the example performed in George an
 \caption{Marginal probability of inclusion by applying George and McCulloch (1997) to the weekly returns for S\&P 500 from 2012-2018 }
 \end{figure}
 
+Beyond the tracking portfolio construction, there is additional information embedded in this plot. Suppose that for a certain time period, this graph depicted more candidates selected nearly always or perhaps larger gaps in inclusion probabilities. This type of information can perhaps provide context as to the state of the market. If additional candidates are selected with high frequency, that could speak to a decrease in the correlation amongst assets and thus a requirement to include additional assets for explanatory power. Likewise, large gaps could indicate consolidation in that a few assets are disproportionately responsible for the performance of the market. These secondary analysis provide lift to the Bayesian framework over the standard optimization methodologies.
 
-
-G\&M continue by running nested regressions and identifying the incremental explanatory power as measured by $R^2$ of each additional candidate stock. Here, we break from G\&M and explore two different measures, in-sample and post tracking error.
+The original application continues by running nested regressions and identifying the incremental explanatory power as measured by $R^2$ of each additional candidate stock. Here, we supply a different measure to demonstrate the explanatory power, tracking error, computed as $TE=\sqrt{Var(r_p-r_b)}$. We can surmise that, on the basis of in-sample tracking error, only a limited subset of stocks would be required to support a tracking error of less than 1 percent annually.
 
 \begin{figure}[H]
-\subfigure[Incremental root mean squared error]{\includegraphics[width=8cm]{rmse-plot}}
-\hfill
-\subfigure[Incremental tracking error]{\includegraphics[width=8cm]{te-plot}}
+\centering
+\includegraphics[width=8cm]{te-plot}
 \caption{In sample results applying George and McCulloch (1997) to the weekly returns for S\&P 500 from 2012-2018. Values are computed by sequentially including assets based on marginal probability }
 \end{figure}
 
-G\&M also makes no comment about the selection of the stocks. For example, looking at those top several stocks that appear to be chosen almost always, do those remain consistent over multiple iterations? Or, particularly due to the correlation structure inherent in the stock market, do we see patterns emerge where highly correlated stocks might be chosen as equivalents? As it turns out, the top stocks selected are frequently the same. Over numerous iterations, we identify stocks such as AAPL, AMZN, BA, XOM, \& MSFT being selected frequently. Annecdotally, this makes sense as these correspond to the largest market cap stocks or significant drivers of returns in recent years.
+A common follow-up question from a portfolio manager would be to ask how consistent are the results? That is, looking at those top several stocks that appear to be chosen almost always, do those remain consistent over multiple iterations? Or, particularly due to the correlation structure inherent in the stock market, do we see patterns emerge where highly correlated stocks might be chosen as equivalents? As it turns out, the top stocks selected are frequently the same. Over numerous iterations, we identify stocks such as AAPL, AMZN, BA, XOM, and MSFT being selected frequently. In George and McCulloch (1997) they explore this looking at the relative probability of individual models and finding that only a subset stand out.
 
-However, it also begs the question of whether or not a naive approach to stock selection would do just as well. To investigate this, we use the same period of data (2012-2018) and compare both the in and out of sample performance of the G\&M algorithm to five different naive algorithms:
+However, based on those frequent selections, it begs the question of whether or not a naive approach to stock selection would do just as well. To investigate this, we use the same period of data (2012-2018) and compare both the in and out of sample performance of the spike and slab algorithm to five different naive selection methods:
 \begin{itemize}
 	\itemsep=0em
 	\item[1.] Selecting the top 10 stocks by market cap
@@ -268,27 +269,11 @@ However, it also begs the question of whether or not a naive approach to stock s
 	\item[4.] Selecting the top stock in each GICS Industry by market cap ($\approx 70$)
 	\item[5.] Selecting the top stock in each GICS Sub-Industry by market cap ($\approx 150$)
 \end{itemize}
-where GICS refers to the Global Industry Classification Standard. The G\&M algorithm is run on 250 days of data (approximately 1 year) and any stock that has a marginal inclusion probability of greater than 80\% is selected. For the same date, we construct the above naive portfolios using equal weighted contributions from the selected stocks. The portfolios are then held for 20 days (approximately 1 month) after which we rebalance the portfolios using the same logic and repeat until the end of 2018.
+where GICS refers to the Global Industry Classification Standard. The spike and slab algorithm is run on 250 days of data (approximately 1 year) and any stock that has a marginal inclusion probability of greater than 80\% is selected. For the same date, we construct the above naive portfolios using equal weighted contributions from the selected stocks. The portfolios are then held for 20 days (approximately 1 month) after which we rebalance the portfolios using the same logic and repeat until the end of 2018.
 
 {\color{red} Add plots here showing tracking error and performance}
 
 
-\begin{itemize}
-	\item[Optimization]
-		\begin{itemize}
-		\item Implement Benidis et al. (2018) optimization approaches for setups we find interesting, setups meaning different constraints present on either number of assets or amount held or long-only portfolios, etc.
-	\end{itemize}
-	\item[Bayesian]
-	\begin{itemize}
-		\item Extend the basic approach in George and McCulloch (1997) to include portfolio constraints as in Benidis et al. (2018).  The point of this would be to compare to the optimization approaches in Benidis et al. (2018) and see how valuable the Bayesian uncertainty quantification could be.  How much does the optimal solution differ from the posterior?  How wide is the posterior and how far can you get from the optimum while maintaining acceptable performance.
-	\end{itemize}
-	\item[Gen. fid.]
-		\begin{itemize}
-			\item Implement Williams and Hannig (2019) approach on index data.
-			\item Tweak Williams and Hannig (2019) definition 2.1 of $\eps-$admissibility to account for additional constraints, like those in Benidis et al. (2018).
-			\item Compare performance to George and McCulloch (1997), optimization approaches.
-	\end{itemize}
-\end{itemize}
 
 \subsection{With constraints}
 The basic hierarchical model of George and McCulloch (1997) places a normal prior on the asset weights $w$, which does not take into account any type of holding constraints, e.g. long only portfolios.  Here we present an alternative model for long-only portfolios:
@@ -299,35 +284,77 @@ The basic hierarchical model of George and McCulloch (1997) places a normal prio
 \textbf{w}|\gamma, \sigma^2 & \sim Dir(||\gamma||_0; \beta).
 \end{align}
 
-Here the asset weights are given a Dirichlet prior conditional on the included assets.  This prior enforces the constraints $\textbf{w}^\top 1_{N\times 1}=1$ and $\textbf{w}\geq 0_{N\times 1}$. Implementing this model is difficult in practice as it requires us to utilize Reversible Jump MCMC in order to change candidate stock inclusions. Roughly, the algorithm is as follows:
+Here the asset weights are given a Dirichlet prior conditional on the included assets.  This prior enforces the constraints $\textbf{w}^\top 1_{N\times 1}=1$ and $\textbf{w}\geq 0_{N\times 1}$. Additionally,for the above, the proposal is Bernoulli with some high probability of $1$ if $\gamma^i_j =1$ and some low probability of $1$ if $\gamma^i_j =0$. Such a proposal will tend to slowly change the included assets. Implementing this model is difficult in practice for two reasons. First, it requires us to utilize a reversible jump MCMC in order to change candidate stock inclusions. And secondly, for the Dirichlet prior we have to accept or reject the entire space at once. This results in a low acceptance rate and thus the MCMC needs to be run over a significant number of iterations. Roughly, the algorithm is as follows:
 
-The posterior density $\pi_n$ of $(\gamma, \textbf{w})$ given the data is proportional to the likelihood times the prior density, and can be sampled using, for instance, Metropolis-Hastings within a Gibbs sampler.
-
-\begin{enumerate}
-	\item Begin with the $i^{th}$ sample $(\gamma^i, \textbf{w}^i)$.
-	\item Propose a new sample of $\gamma$, call it $\gamma^\star$, by drawing it at random from the proposal distribution.  For now, let's say the proposal is Bernoulli with some high probability of $1$ if $\gamma^i_j =1$ and some low probability of $1$ if $\gamma^i_j =0$; such a proposal will tend to slowly change the included assets.
-	\item Compute the acceptance ratio (on the log scale):
-	\[a=\log \pi_n(\gamma^\star, \textbf{w}^i) - \log \pi_n(\gamma^i, \textbf{w}^i) + \log \pi(\gamma^i) - \log \pi(\gamma^\star)\]
-	\item Generate $U\sim \unif(0,1)$ and accept $\gamma^{i+1}=\gamma^\star$ if $\exp(a)>U$.  
-\end{enumerate}
+\begin{algorithm}
+\caption{RJMCMC with Dirichlet Prior}
+\begin{algorithmic} [1]
+\WHILE{$n<N$}
+\STATE {Run a Metropolis Hastings MCMC step a la Algorithm 1 to determine a $\beta^\star$ proposal}
+\STATE Calculate birth, death and relocate parameters as follows
+	\IF {$|\beta|_0 < size$}
+		\STATE {$birth \gets (1/3)Poisson(|\beta|_0+1,\mu)/Poisson(|\beta|_0,\mu)$}
+	\ELSE
+		\STATE {$birth \gets 0$}
+	\ENDIF
+	\IF {$|\beta|_0 > 1$}
+		\STATE {$death \gets (1/3)Poisson(|\beta|_0-1,\mu)/Poisson(|\beta|_0,\mu)$}
+	\ELSE
+		\STATE {$death \gets 0$}
+	\ENDIF
+	\STATE {$relocate \gets \max(1-b-d,0)$}
+\STATE {Compute move probabilities $b, r, d$  from a multinomial distribution with probabilities $(birth, death, relocate)$}
+\IF {Birth: $b=1$}
+	\STATE Choose an index $i$ that currently has $\beta_i=0$
+	\STATE Compute the jump probability ($\eta$) of including this new covariate given the likelihood ratio of the Gaussian distributions
+	\STATE Generate $\beta^\star$ with $\beta_i=U(0,1)$ and reduce all the non-zero $\beta_j$ proportionally
+	\STATE Generate $U\sim \unif(0,1)$
+	\IF {$\eta>U$}
+		\STATE Accept $\beta^{n+1}=\beta^\star$
+	\ELSE
+		\STATE Reject the proposed $\beta^\star$
+	\ENDIF
+\ELSIF {Death: $d=1$}
+	\STATE Choose an index $i$ that currently has $\beta_i \neq 0$
+	\STATE Compute the jump probability ($\eta$) of excluding this covariate given the likelihood ratio of the Gaussian distributions
+	\STATE Set $\beta^\star$ with $\beta_i=0$ and increase all the non-zero $\beta_j$ proportionally
+	\STATE Generate $U\sim \unif(0,1)$
+	\IF {$\eta>U$}
+		\STATE Accept $\beta^{n+1}=\beta^\star$
+	\ELSE
+		\STATE Reject the proposed $\beta^\star$
+	\ENDIF
+\ELSIF {Relocate: $r=1$}
+	\STATE Choose indices $i, j$ and set $\beta^\star$ with $\beta_i$ and $\beta_j$ swapped
+	\STATE Compute the jump probability ($\eta$) of swapping these covariates given the likelihood ratio of the Gaussian distributions
+	\STATE Generate $U\sim \unif(0,1)$
+	\IF {$\eta>U$}
+		\STATE Accept $\beta^{n+1}=\beta^\star$
+	\ELSE
+		\STATE Reject the proposed $\beta^\star$
+	\ENDIF
+\ELSE
+	\STATE No change in $\beta$
+\ENDIF
+\ENDWHILE
+\end{algorithmic}
+\end{algorithm}
 
 However, while theoretically an alternative option to optimization problems, the implementation requires considerable time to converge. As an example, over several tens of thousands of iterations, if the number of candidate stocks was larger than 25 the algorithm rarely moved significantly away from equal weighting. This limitation puts this methodology out of consideration for many portfolio managers.
 For more information about the reversible jump MCMC, see Hastie and Green (2012).
 
 \section{Generalized Fiducial Inference}
-Fiducial Inference is an area of statistical inference original proposed by R.A. Fisher to attempt to find distributional representations of variables without requiring priors. While originally dismissed, recently research in Generalized Fiducial Inference (GFI) has identified some potentially valuable applications. In particular, we want to point out the recent paper of Williams and Hannig (2018). In their paper, they explore the use of GFI for variable selection in cases where the data is highly collinear. Particularly in the financial world where assets can be highly correlated, this appears to be an interesting topic to explore.
+Fiducial Inference is an area of statistical inference originally proposed by R.A. Fisher to attempt to find distributional representations of parameters without requiring priors. While originally dismissed due to various concerns, recent research in generalized fiducial inference (GFI) has identified some potential applications for the methods of analysis. In particular, the recent paper of Williams and Hannig (2019) makes remarks about the application of GFI to variable selection in high dimensional situations.
 
-Williams and Hanning (2018) describe an approach where the underlying premise is that the non-zero parameters are non-redundant in that they contain the minimal amount of information to explain or predict the observed data. These subsets are referred to as \textit{$\epsilon$-admissible}. Utilizing the code provided by Mr. Williams, with some adjustments, we attempted to apply the algorithm to our 2012-2018 returns data. Our observations were that the approach did correctly narrow down to approximately 6-10 stocks to best track. However, the selections were widely varying as contrasted with the George and McCulloch algorithm.
+As they discuss in the paper, algorithms such as LASSO and SCAD require penalization functions based on the magnitude of the covariates. As in our portfolio selection problem, the ideal state would be binary inclusion (i.e. $\ell_0$) of covariates. Williams and Hanning (2019) describe their approach where the underlying premise is to identify non-zero parameters that are non-redundant in that they contain the minimal amount of information to explain or predict the observed data. These subsets of the parameter space are referred to as \textit{$\epsilon$-admissible}. Paraphrasing from the paper for explanation, suppose that there is a model space \{$x_1, x_2, ... x_p$\} are covariates and $Y \sim N(\beta_1 x_1 + \beta_2 x_2 + ... +\beta_p x_p, \sigma^2 I_p)$. If the unknown, but true values of \textbf{$\beta$} are $(b_1,b_2,0,...0)$, then the parameter space consisting of \{$x_1, x_2, x_3$\} would \textit{not} be \textit{$\epsilon$-admissible} because the subset \{$x_1, x_2$\} would perfectly predict it. The method constructs a probability distribution on such \textit{$\epsilon$-admissible} subsets providing a Bayesian-like posterior over the subsets with fewer covariates.
 
-There are additional areas for future research here. First, if the top stocks selected are indeed optimal, can we identify the related $\epsilon$-admissible subsets to use in analyzing highly correlated alternative choices. That is, do the {$\epsilon$-admissible subsets beget some information about the inherent structure of the market? Secondly, given the fact that it does appear to accurately reduce the dimension of the problem, can this be applied as an initial filter to the standard optimization problem, similar to how we have shown as an extension of the George and McCulloch algorithm?
+Certain sectors within the stock universe are highly correlated (although not necessarily collinear) and thus a methodology that strives to identify and remove models with redundancies with a true $\ell_0$ constraint would seem like a good approach to our problem. Utilizing the code provided by Mr. Williams, with some adjustments, we attempted to apply the algorithm to our 2012-2018 returns data. Our observations were that the approach did correctly narrow down to approximately 20 or so assets. However, the stocks selected were widely varying as contrasted with the George and McCulloch (1997) method that had more consistency. In all likelihood, this is due to the correlation structure of the market where one could likely find assets that are near substitutes for each other.
+
+However, there are additional areas for future research here. First, alternative implementations of the attempts we have made here. Perhaps different hyper parameter settings for $p_0$, the number of iterations, etc. could produce fruitful results. Secondly, if the top stocks selected are indeed optimal, can we identify the related $\epsilon$-admissible subsets to use in analyzing highly correlated alternative choices? That is, do the {$\epsilon$-admissible subsets beget some information about the inherent structure of the market? Thirdly, given the fact that it does appear to accurately reduce the dimension of the problem, can this be applied as an initial filter to the standard optimization problem, similar to how we have shown as an extension of the spike and slab algorithm?
 
 \section{Conclusion}
 
-In this paper we review some of the materials and common methods used in asset management to identify sparse sets of securities for index tracking. We refreshed the algorithm put forth in George and McCulloch (1997) with more recent data 
-
-Additionally, there are several future avenues of research. First, does the density or distribution of the selection probabilities from the George and McCulloch algorithm provide any information about the structure of the market? Secondly, the premise of the variable selection methodology set forth in Williams and Hannig (2018) seems particularly useful for this scenario. Perhaps not solely in the stock selection realm but in the determination of the $\epsilon$-admissible subsets and whether or not those provide any information about relationships. 
-
-Use of the stocks selected to reduce the parameter set
+In this paper, we reviewed the problem and some common methods used currently in asset management to identify sparse portfolios of securities for index tracking. We refreshed the spike and slab algorithm put forth in George and McCulloch (1997) using more recent data and provided some additional insights on its performance and use cases. We also identified a methodology that would provide a solution for the constrained optimization case in RJMCMC with a Dirichlet prior. Finally, we introduced the idea of generalized fiducial inference and briefly explored its  potential utility in solving this problem. In addition to these explorations, we also note several extensions for future investigation. First, does the density or distribution of the selection probabilities from either the spike and slab algorithm or GFI algorithm provide any information about the structure of the market? Secondly, what is the utility of these types of algorithms as inputs into the standard optimization problem and does this provide an avenue of stepwise based solutions to it?
 
 All code utilized in the analysis for this paper can be found on Github: \href{https://github.com/bob-skowron/SU19-Independent-Study}{https://github.com/bob-skowron/SU19-Independent-Study}
 
