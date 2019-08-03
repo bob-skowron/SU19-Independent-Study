@@ -13,6 +13,8 @@
 \usepackage{subfigure}
 \usepackage{float}
 \usepackage{hyperref}
+\usepackage{algorithm}
+\usepackage{algorithmic}
 
 
 %\RequirePackage[OT1]{fontenc} 
@@ -157,12 +159,12 @@
 
 
 \begin{abstract}
-	We review approaches to solving the limited asset index tracking problem in investment management. We discuss reasons for utilizing Bayesian approaches and refresh some previous papers. Completing the paper, we discuss potential applications of Generalized Fiducial Inference to the problem and areas for continued research.
+	We review approaches to solving the sparse portfolio index tracking problem in investment management. We explore in additional depth the work of George and McCulloch (1997) and elaborate on the applications of a spike and slab variable selection process for tracking portfolios. Potential further applications of this method are discussed. Finally, we discuss the potential applications of generalized fiducial inference to the problem and areas for continued research.
 
 
 \smallskip
 
-\emph{Keywords and phrases:} Index tracking, regularization, variable selection, Bayesian inference, generalized fiducial inference, Markov chain Monte Carlo.
+\emph{Keywords and phrases:} Sparse portfolio, index tracking, regularization, variable selection, Bayesian inference, generalized fiducial inference, Markov chain Monte Carlo
 
 \end{abstract}
 
@@ -170,20 +172,22 @@
 \section{Introduction}
 \label{S:intro}
 
-Stock indices like the S\&P 500 and Russell 2000 are large, diverse groups of assets especially attractive to investors.  However, for active investors, it can be difficult to invest in even a moderate portion of the assets in these indices due to several reasons such as the costs associated with holding many assets and the difficulty of managing a portfolio of many assets.  Therefore investors seek to closely replicate or track the performance of a whole index by carefully selecting a small, manageable subset of its assets and deploying excess capital to more direct areas of focus.
+Stock indices like the S\&P 500 and Russell 2000 are large, diverse groups of assets of particular relevance to investors.  However, for active managers, there are many reasons why it would not it beneficial to invest even a moderate portion of the assets in these indices. There are several reasons for this including the costs associated with holding many assets, the difficulty of managing a portfolio of many assets, and the inability to deploy excess capital to higher alpha generating bets.  Therefore investors may seek to closely replicate or track the performance of a whole index by carefully selecting a small, manageable subset of its assets and deploying excess capital to more tactical bets.
 
-The most straightforward way to solve the index tracking problem is to pose it as an optimization problem in which one minimizes a measure of the tracking error over acceptable portfolios.  Difficulties with this approach arise if one includes practical considerations in the optimization problem such as bounds on the number of assets and amounts invested in each, which take the form of constraints; see, e.g. Fastrich et al. (2014) and Benidis et al. (2018).  These constrained optimizations often can be solved using mixed integer programming but may converge slowly for high-dimensional data.  
+The most straightforward way to solve the index tracking problem is to pose it as an optimization problem in which one minimizes a measure of the tracking error over acceptable portfolios.  Difficulties with this approach arise if one includes practical considerations in the optimization problem such as bounds on the number of assets and amounts invested in each, which take the form of constraints; see, e.g. Fastrich et al. (2014) and Benidis et al. (2018).  These constrained optimizations often can be solved using mixed integer programming but may converge slowly for high-dimensional data.
 
-Other approaches to index tracking involve replacing the tracking error minimization by an approximation or heuristic algorithm as in the above references or by changing the optimization criteria.  For example, a Markowitz mean-variance portfolio model that minimizes portfolio variance while achieving a minimum return can approximate index tracking when the target return is the index return; see Fastrich et al. (2015) and Puelz et al. (2018).   
+Other approaches to index tracking involve replacing the tracking error minimization by an approximation or heuristic algorithm as in the above references or by changing the optimization criteria.  For example, a Markowitz mean-variance portfolio model that minimizes portfolio variance while achieving a minimum return can approximate index tracking when the target return is the index return; see Fastrich et al. (2015) and Puelz et al. (2018).
 
-In contrast to optimization methods, Bayesian methods for index tracking output a range of potential portfolios rather than a single solution.  George and McCulloch (1997) regress index returns on asset returns and use a spike and slab type prior to encourage sparsity in the number of assets selected to remain in the model.  The marginal posterior of included assets can quantify the uncertainty in asset selection, better enabling the financial analyst to make a final subjective judgement.  Variations on the approach in George and McCulloch (1997) involve different prior specifications of sparsity, such as the SCAD penalty of Fan and Li (2001).  A new Bayesian-like generalized fiducial approach to sparse regression was introduced in Williams and Hannig (2019).  Rather than directly encouraging sparse portfolios, the generalized fiducial approach limits acceptable portfolios to those with only minimally correlated assets.  
+In contrast to optimization methods, Bayesian methods for index tracking output a range of potential portfolios rather than a single solution.  This can be beneficial as estimating a covariance matrix for a large number of correlated assets requires a significant time scale to avoid singularity or ill-condition. George and McCulloch (1997) regress index returns on asset returns and use a spike and slab type prior to encourage sparsity in the number of assets selected to remain in the model.  The marginal posterior of included assets can quantify the uncertainty in asset selection, better enabling the portfolio manager to make a final subjective judgement.  Variations on the approach in George and McCulloch (1997) involve different prior specifications of sparsity, such as the SCAD penalty of Fan and Li (2001) and the spike and slab lasso of Ročková and George (2018).  A new Bayesian-like generalized fiducial approach to sparse regression was introduced in Williams and Hannig (2019).  Rather than directly encouraging sparse portfolios, the generalized fiducial approach limits acceptable portfolios to those with only minimally correlated assets.
+
+The paper is organized as follows. Section 2 reviews the optimization problem and various proposed methods for solving. Section 3 reviews Bayesian approaches to the same problem. Section 3 also includes an in-depth look at the spike and slab approach of George and McCulloch (1997) with a more detailed discussion of applications. Additionally, we discuss a possible way to solve the constrained optimization problem using a Dirichlet prior with reversible jump Markov chain Monte Carlo. Section 4 investigates the generalized fiducial inference (GFI) approach and discusses potential applications of such a method. Finally, the paper is concluded in section 6 with suggestions for additional avenues of future investigation.
        
 
-\section*{Optimization}
+\section{The Optimization Problem}
 
 Adopting the notation of Benidis et al. (2018) let $\textbf{r}^b = (r_1^b,...,r_T^b)^\top \in \mathbb{R}^T$ and $X = [\textbf{r}_1,...,\textbf{r}_T]^\top \in \mathbb{R}^{T\times N}$ denote the returns of the index and the $N$ assets of the index over $T$ time periods.  Let $\textbf{b}\in\mathbb{R}_+^N$ denote the normalized index weights of each asset, i.e. $b^\top 1_{T\times 1} = 1$ and $X\textbf{b} = \textbf{r}^b$.  
 
-A portfolio is defined as a weight vector $\textbf{w} = (w_1, ..., w_N)$ giving the proportion invested in each asset.  For example, when the investor is limited to long positions tho portfolio satisfies $w_i \geq 0$ for every $i = 1, ..., N$ and $\textbf{w}^top 1 = 1$.  Then, the tracking error of the portfolio can be measured in many ways, one of which is the $L_2-$error or empirical tracking error
+A portfolio is defined as a weight vector $\textbf{w} = (w_1, ..., w_N)$ giving the proportion invested in each asset.  For example, when the investor is limited to long positions the portfolio satisfies $w_i \geq 0$ for every $i = 1, ..., N$ and $\textbf{w}^top 1 = 1$.  Then, the tracking error of the portfolio can be measured in many ways, the primary of which is the $L_2-$error or empirical tracking error
 \[\text{ETE}(\textbf{w})=\frac{1}{T}||X\textbf{w}-\textbf{r}^b||_2^2.\]
 
 As described in the introduction, we desire a portfolio with only a small number of assets relative to the size of the index.  However, sparse minimization of the empirical tacking error of a long portfolio is not a trivial problem. Benidis et al. (2018) defines the sparse optimization problem
@@ -191,50 +195,78 @@ As described in the introduction, we desire a portfolio with only a small number
 \text{minimize}_{\textbf{w}}& \frac{1}{T}||X\textbf{w}-\textbf{r}^b||_2^2 + \lambda||\textbf{w}||_0\nonumber\\
 \text{subject to}& \textbf{w}^\top 1_{N\times 1}=1, \nonumber \\
  & \textbf{w}\geq 0_{N\times 1}.
-\end{align}  
-The primary challenge is the presence of the nonconvex penalty $\lambda||\textbf{w}||_0$.  Benidis et al. (2018) introduce a convex approximation to this penalty and perform the minimization using their LAIT and related procedures.  The resulting solution produces a sparse, long portfolio with good tracking performance.
+\end{align} 
+The primary challenge is the presence of the nonconvex penalty $\lambda||\textbf{w}||_0$.  Benidis et al. (2018) introduce a convex approximation to this penalty and perform the minimization using their LAIT and related procedures.  The resulting solution produces a sparse, long-only portfolio with good tracking performance.
 
-\section{Basic Bayesian methods}
+Other potential methods of solving this problem include mixed integer programming, genetic algorithms. However, it is not possible to guarantee optimality using these methods and they often come with a considerable performance cost. Other heuristic methods can also be applied. For example, one could solve the unconstrained optimization problem and identify the most significant contributors. Then, secondary optimizations could be run with the limited set of assets and constraints can be specified as a constant per choice of assets.
 
-George and McCulloch (1997) presents methods for variable selection in regression from a Bayesian viewpoint.  Their primary application is construction of index-tracking portfolios.  They begin with a regression model of the index returns
+Regardless of the methodology, these methods all result in singular solutions. Given that we are using high dimensional, correlated data, the the empirical covariance matrix can often be ill-conditioned which can result in highly sensitive results. In the next section, we discuss Bayesian methods which provide distributional results which may help alleviate some of those issues.
+
+\section{Bayesian methods}
+
+George and McCulloch (1997) presents methods for variable selection in regression from a Bayesian viewpoint.  A primary application is construction of index-tracking portfolios.  They begin with a regression model of the index returns
 $\mathbf{r}^b = X \mathbf{w} + \mathbf{\epsilon}$
-where $\mathbf{\epsilon}\sim \nm_T(0,\sigma^2I_{T\times T})$.  Such a regression model is somewhat artificial because the index returns actually are a \emph{deterministic} linear combination of the constituent asset returns.  However, since the Gaussian kernel contains the (negative) empirical tracking error, maximizing the likelihood of (a sparse version of) the model is equivalent to minimizing the empirical tracking error.  To achieve sparsity in the predictors and hence a small portfolio George and McCulloch (1997) consider independent Bernoulli priors of the form
+where $\mathbf{\epsilon}\sim \nm_T(0,\sigma^2I_{T\times T})$.  Such a regression model is somewhat artificial because the index returns actually are a \emph{deterministic} linear combination of the constituent asset returns.  However, since the Gaussian kernel contains the (negative) empirical tracking error, maximizing the likelihood of (a sparse version of) the model is equivalent to minimizing the empirical tracking error.  To achieve sparsity in the predictors, and hence a small portfolio, George and McCulloch (1997) consider independent Bernoulli priors of the form
 \begin{align}
 \pi(\gamma) = \prod_{i=1}^N\alpha_i^{\gamma_i}(1-\alpha_i)^{(1-\gamma_i)}
 \end{align}
-for $\alpha_i\in(0,1)$ and where $\gamma \in \{0,1\}^N$ denotes which assets are included in the portfolio.  
+for $\alpha_i\in(0,1)$ and where $\gamma \in \{0,1\}^N$ denotes which assets are included in the portfolio. Then, conditional on such $\gamma$, the $\beta_i$ are distributed as
+\begin{align}
+\pi(\beta_i \vert \gamma) = (1-\gamma_i)N(0,v_{0_{\gamma_i}}) + \gamma_i N(0,v_{1_{\gamma_i}})
+\end{align}
+where $v_0$ and $v_1$ can be constant or varying based say on the number of non-zero gammas. For the problem at hand, this construction poses two challenges. First, it does not guarantee that $\beta_i$ will not be less than zero (i.e. a long-only constraint) and secondly, that $\sum\beta_i=1$ (i.e. no leverage constraint).
+
+Solving this problem is accomplished by running MCMC with a Gibbs sampler.
+\begin{algorithm}
+\caption{MCMC for spike and slab}
+\begin{algorithmic} 
+\STATE $\gamma_i = 0 \forall i$
+\WHILE{$n<N$}
+\STATE Choose $i$ and set $\gamma_i = 1-\gamma_i$
+\STATE Compute the change in the log posterior $\pi(\gamma|Y)=r$ 
+\STATE Randomly sample from a $Binomial(1,\min(e^{r}, 1))$
+\IF{Sample = 1}
+\STATE Accept the proposed $\gamma$
+\ELSE
+\STATE Reject the proposed $\gamma$
+\ENDIF
+\ENDWHILE
+\end{algorithmic}
+\end{algorithm}
 
 
-\section{Revisiting George and McCulloch (1997)}
+\subsection{Revisiting George and McCulloch (1997)}
 
-To begin our analysis, we first begin by refreshing the analysis performed in George and McCulloch (1997) (G\&M) and providing some additional insights. Using the Wharton Research Data Services (WRDS) we obtain weekly returns for stocks in the S\&P 500 from January 2012 to December 2018. Following the methodology laid out in Section 6 of G\&M we compute the marginal probabilities of inclusion for the stocks. Utilizing 200 randomly chosen stocks, as in their example, we can observe a similar distribution of marginal inclusion probabilities where a small number are nearly always included and rapidly fall off with fewer than 50 stocks being selected more than a handful of iterations.
+To begin our analysis, we start by refreshing the example performed in George and McCulloch (1997) and providing some additional insights. Using the Wharton Research Data Services (WRDS) we obtain weekly returns for stocks in the S\&P 500 from January 2012 to December 2018. Following the methodology laid out in Section 6 of George and McCulloch (1997) we compute the marginal probabilities of inclusion for the stocks. Utilizing 200 randomly chosen stocks, as in their example, we can observe a similar distribution of marginal inclusion probabilities where a small number are nearly always included and rapidly fall off with fewer than 50 stocks being selected more than a handful of iterations.
 
 \begin{figure}[H]
-\centering
+\subfigure[Replication of 1985-1991 analysis]{\includegraphics[width=8cm]{colmeans-plot-orig}}
 \hfill
-\subfigure[Replication of 1985-1991 analysis]{\includegraphics[width=5cm]{colmeans-plot-orig}}
-\hfill
-\subfigure[Algorithm applied to 2012-2018]{\includegraphics[width=5cm]{colmeans-plot-recent}}
-\hfill
-\caption{George and McCulloch algorithm applied to 1985-1991 and 2012-2018 weekly returns for S\&P 500}
+\subfigure[Algorithm applied to 2012-2018]{\includegraphics[width=8cm]{colmeans-plot-recent}}
+\caption{Marginal probability of inclusion by applying George and McCulloch (1997) to the weekly returns for S\&P 500 from 2012-2018 }
 \end{figure}
 
 
 
 G\&M continue by running nested regressions and identifying the incremental explanatory power as measured by $R^2$ of each additional candidate stock. Here, we break from G\&M and explore two different measures, in-sample and post tracking error.
 
-{\color{red} Insert plots here for tracking error}
-{\color{red} Insert plots here for cumulative returns}
+\begin{figure}[H]
+\subfigure[Incremental root mean squared error]{\includegraphics[width=8cm]{rmse-plot}}
+\hfill
+\subfigure[Incremental tracking error]{\includegraphics[width=8cm]{te-plot}}
+\caption{In sample results applying George and McCulloch (1997) to the weekly returns for S\&P 500 from 2012-2018. Values are computed by sequentially including assets based on marginal probability }
+\end{figure}
 
-G\&M also makes no comment about the selection of the stocks. For example, looking at those top several stocks that appear to be chosen almost always, do those remain consistent over multiple iterations? Or, particularly due to the correlation structure inherent in the stock market, do we see patterns emerge where highly correlated stocks might be chosen as equivalents? As it turns out, the top stocks selected are frequently the same. Over numerous iterations, we identify stocks such as AAPL, AMZN, BA, XOM, \& MSFT frequently near the top selected. Annecdotally, this makes sense as these correspond to the largest market cap stocks or significant drivers of returns in recent years.
+G\&M also makes no comment about the selection of the stocks. For example, looking at those top several stocks that appear to be chosen almost always, do those remain consistent over multiple iterations? Or, particularly due to the correlation structure inherent in the stock market, do we see patterns emerge where highly correlated stocks might be chosen as equivalents? As it turns out, the top stocks selected are frequently the same. Over numerous iterations, we identify stocks such as AAPL, AMZN, BA, XOM, \& MSFT being selected frequently. Annecdotally, this makes sense as these correspond to the largest market cap stocks or significant drivers of returns in recent years.
 
 However, it also begs the question of whether or not a naive approach to stock selection would do just as well. To investigate this, we use the same period of data (2012-2018) and compare both the in and out of sample performance of the G\&M algorithm to five different naive algorithms:
 \begin{itemize}
-	\item[1.] Selecting to the top 10 stocks by market cap
+	\itemsep=0em
+	\item[1.] Selecting the top 10 stocks by market cap
 	\item[2.] Selecting the top stock in each GICS Sector by market cap ($\approx 10$)
 	\item[3.] Selecting the top stock in each GICS Group by market cap ($\approx 25$)
 	\item[4.] Selecting the top stock in each GICS Industry by market cap ($\approx 70$)
-	\item[5.] Selecting the top stock in each GICS Sub-industry by market cap ($\approx 150$)
+	\item[5.] Selecting the top stock in each GICS Sub-Industry by market cap ($\approx 150$)
 \end{itemize}
 where GICS refers to the Global Industry Classification Standard. The G\&M algorithm is run on 250 days of data (approximately 1 year) and any stock that has a marginal inclusion probability of greater than 80\% is selected. For the same date, we construct the above naive portfolios using equal weighted contributions from the selected stocks. The portfolios are then held for 20 days (approximately 1 month) after which we rebalance the portfolios using the same logic and repeat until the end of 2018.
 
@@ -259,7 +291,6 @@ where GICS refers to the Global Industry Classification Standard. The G\&M algor
 \end{itemize}
 
 \subsection{With constraints}
-
 The basic hierarchical model of George and McCulloch (1997) places a normal prior on the asset weights $w$, which does not take into account any type of holding constraints, e.g. long only portfolios.  Here we present an alternative model for long-only portfolios:
 \begin{align}
 \textbf{r}^b &\sim \nm_{T}(X\textbf{w}, \sigma^2I_{T\times T})\\
@@ -288,15 +319,14 @@ Fiducial Inference is an area of statistical inference original proposed by R.A.
 
 Williams and Hanning (2018) describe an approach where the underlying premise is that the non-zero parameters are non-redundant in that they contain the minimal amount of information to explain or predict the observed data. These subsets are referred to as \textit{$\epsilon$-admissible}. Utilizing the code provided by Mr. Williams, with some adjustments, we attempted to apply the algorithm to our 2012-2018 returns data. Our observations were that the approach did correctly narrow down to approximately 6-10 stocks to best track. However, the selections were widely varying as contrasted with the George and McCulloch algorithm.
 
-There are additional areas for future research here. First, if the top stocks selected are optimal, can we identify the related $\epsilon$-admissible subsets to use in analyzing highly correlated alternative choices. That is, do the {$\epsilon$-admissible subsets beget some information about the inherent structure of the market? Secondly, given the fact that it does appear to accurately reduce the dimension of the problem, can this be applied as an initial filter to a more 
+There are additional areas for future research here. First, if the top stocks selected are indeed optimal, can we identify the related $\epsilon$-admissible subsets to use in analyzing highly correlated alternative choices. That is, do the {$\epsilon$-admissible subsets beget some information about the inherent structure of the market? Secondly, given the fact that it does appear to accurately reduce the dimension of the problem, can this be applied as an initial filter to the standard optimization problem, similar to how we have shown as an extension of the George and McCulloch algorithm?
 
 \section{Conclusion}
 
-In this paper we review some of the materials and common methods used in asset management to identify sparse sets of securities for index tracking. 
+In this paper we review some of the materials and common methods used in asset management to identify sparse sets of securities for index tracking. We refreshed the algorithm put forth in George and McCulloch (1997) with more recent data 
 
-{\color{red} discuss additional potential areas of research}
-Using the density of the selection to determine regime
-Further GFI research
+Additionally, there are several future avenues of research. First, does the density or distribution of the selection probabilities from the George and McCulloch algorithm provide any information about the structure of the market? Secondly, the premise of the variable selection methodology set forth in Williams and Hannig (2018) seems particularly useful for this scenario. Perhaps not solely in the stock selection realm but in the determination of the $\epsilon$-admissible subsets and whether or not those provide any information about relationships. 
+
 Use of the stocks selected to reduce the parameter set
 
 All code utilized in the analysis for this paper can be found on Github: \href{https://github.com/bob-skowron/SU19-Independent-Study}{https://github.com/bob-skowron/SU19-Independent-Study}
@@ -318,6 +348,8 @@ All code utilized in the analysis for this paper can be found on Github: \href{h
 \item{} Hastie, D. I. and Green, P. J. (2012), Model choice using reversible jump Markov chain Monte Carlo. Statistica Neerlandica, 66: 309-338. doi:10.1111/j.1467-9574.2012.00516.x
 
 \item{} Puelz, D., Hahn, R. and Carvalho, Carlos M.~(2018). Sparse Mean-Variance Portfolios: A Penalized Utility Approach. \url{https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2729504}.
+
+\item{} Ročková, Veronika and George, Edward. (2018). The Spike-and-Slab LASSO. Journal of the American Statistical Association. 113. 10.1080/01621459.2016.1260469.
 
 \item{} Williams, J. P., and Hannig, J.~(2019). Non-Penalized Variable Selection In High-Dimensional Linear Model Settings Via Generalized Fiducial Inference. \emph{Annals of Statistics}.~47(3), 1723-1753. 
 
